@@ -20,9 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The minimum supported Node and the pinned one. The template itself also
+        # The minimum supported Node, the pinned one and the latest release, so a new
+        # Node breaks CI here before a customer's install. The template itself also
         # checks Windows, where customers' agents run it too.
-        node: ['22', '24']
+        node: ['22', '24', 'latest']
         os: ${{ github.repository == 'source-medium/sm-metabase-template' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
