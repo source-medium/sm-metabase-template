@@ -26,11 +26,14 @@ With access to SourceMedium's demo warehouse (never a customer's):
 
 ```sh
 node scripts/verify-sql.mjs --project sm-democo --dataset sm_transformed_v2 \
-  --store democo --from 2026-09-11 --to 2026-10-10            # dry run, free
+  --metadata-dataset sm_metadata --store democo --from 2026-09-11 --to 2026-10-10   # dry run, free
 node scripts/verify-sql.mjs ... --run --max-bytes 2147483648   # bounded execution
+node scripts/verify-sql.mjs ... --run --set compare=year --set grain=week --set country=US
 ```
 
 It expands each question's filters the way Metabase does and never prints rows.
+Every filter takes its default; `--set` gives one another value, and optional
+filters stay unset unless set.
 
 ## Live Metabase check
 

@@ -5,6 +5,7 @@ import {definitions, foundationSql} from '../src/foundation.mjs';
 import {snapshot, makePlan} from '../src/snapshot.mjs';
 import {applyPlan} from '../src/apply.mjs';
 import {cardContent} from '../src/ownership.mjs';
+import {outputAliases} from '../src/content.mjs';
 import {questions as recipes, outputFormats, outputDimensions} from '../foundation/questions.mjs';
 import {modelColumnFormat, columnSettings, formattingFor, valueFormats} from '../src/formats.mjs';
 import {rows, paidRows, foundationTables, tables, options, documented, fakeMetabase, columnFormats, withFormats} from './fixtures.mjs';
@@ -56,22 +57,27 @@ test('metric cards carry the catalog\'s unit under the column Metabase names', (
 test('every native output is a catalog metric, a declared unit or a dimension, and formats from it', () => {
   const types = new Set(['STRING', 'INT64', 'FLOAT64', 'NUMERIC', 'BIGNUMERIC', 'DATE', 'DATETIME', 'TIMESTAMP', 'BOOL']);
   for (const recipe of recipes) {
-    const aliases = [...sql[recipe.key].matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b/gi)].map(m => m[1]).filter(a => !types.has(a));
-    const unclassified = aliases.filter(a => !recipe.metrics?.[a] && !(a in outputFormats) && !outputDimensions.includes(a));
+    const aliases = outputAliases(sql[recipe.key]).filter(a => !types.has(a));
+    const classified = a => !!recipe.metrics?.[a] || a in outputFormats || outputDimensions.includes(a) ||
+      (/^compare2?_/.test(a) && classified(a.replace(/^compare2?_/, '')));
+    const unclassified = aliases.filter(a => !classified(a));
     assert.deepEqual(unclassified, [], `${recipe.key} outputs need a unit or dimension`);
     for (const a of Object.keys(recipe.metrics || {})) assert.ok(aliases.includes(a), `${recipe.key}.${a} is not an output`);
   }
   for (const [alias, format] of Object.entries(outputFormats)) {
     assert.ok(valueFormats.includes(format));
-    assert.ok(recipes.some(r => new RegExp(`\\bAS\\s+${alias}\\b`, 'i').test(sql[r.key])), `${alias} is in no recipe`);
+    assert.ok(recipes.some(r => outputAliases(sql[r.key]).includes(alias)), `${alias} is in no recipe`);
   }
   const definition = define(compiled());
   const kpis = card(definition, 'question:kpis');
   assert.deepEqual(setting(kpis, 'net_revenue'), {column_title: 'Net revenue', decimals: 2});
   assert.deepEqual(setting(kpis, 'mer'), {column_title: 'MER', decimals: 2});
   assert.deepEqual(setting(kpis, 'summary_orders'), {column_title: 'Summary orders'});
+  assert.deepEqual(setting(kpis, 'compare_net_revenue'), {column_title: 'Net revenue (comparison)', decimals: 2}, 'comparisons display like their base');
+  assert.deepEqual(setting(kpis, 'compare2_mer'), {column_title: 'MER (second comparison)', decimals: 2});
   assert.deepEqual(setting(card(definition, 'question:paid_channel'), 'click_through_rate'),
-    {column_title: 'Click-through rate', number_style: 'percent'});
+    {column_title: 'CTR', number_style: 'percent'});
+  assert.deepEqual(setting(card(definition, 'question:creatives'), 'image_url'), {column_title: 'Image', view_as: 'image'});
   assert.deepEqual(setting(card(definition, 'question:paid_channel'), 'clicks'), {column_title: 'Clicks'}, 'no forced decimals on counts');
 });
 

@@ -4,7 +4,7 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {compileCatalog, sqlExpression} from '../src/catalog.mjs';
 import {foundationSql} from '../src/foundation.mjs';
 import {questions, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
-import {filters} from '../src/filters.mjs';
+import {filtersIn} from '../src/filters.mjs';
 import {foundationTables, documented, options} from './fixtures.mjs';
 
 // The producer snapshot reporting_queries publishes; smstack keeps this copy byte-identical.
@@ -70,19 +70,36 @@ test('every question has its SQL file and every SQL file belongs to a question',
   assert.deepEqual(files, questions.map(q => q.key).sort());
 });
 
-test('field filters see the source table under its unaliased DATASET name', () => {
+test('field filters see the source table under its unaliased DATASET or METADATA name', () => {
   for (const question of questions) {
     const text = sql[question.key];
-    assert.ok(text.includes(`\`DATASET.${question.table}\``), `${question.key} reads DATASET.${question.table}`);
-    for (const use of text.matchAll(new RegExp(`\`DATASET\\.${question.table}\`(\\s*)([A-Za-z_]*)`, 'g'))) {
+    const home = question.metadata ? 'METADATA' : 'DATASET';
+    assert.ok(text.includes(`\`${home}.${question.table}\``), `${question.key} reads ${home}.${question.table}`);
+    for (const use of text.matchAll(new RegExp(`\`${home}\\.${question.table}\`(\\s*)([A-Za-z_]*)`, 'g'))) {
       const next = use[2].toUpperCase();
       assert.ok(!use[1] || ['', 'WHERE', 'JOIN', 'LEFT', 'ON', 'GROUP', 'ORDER', 'CROSS', 'UNION'].includes(next),
         `${question.key} must not alias ${question.table} (found ${use[2]})`);
     }
-    assert.ok(!/`[a-z][a-z0-9-]+\.DATASET\./.test(text), `${question.key} must not name a project`);
-    for (const tag of text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
-      const allowed = filters(question.scope, {}).map(p => p.id);
-      assert.ok(allowed.includes(tag[1]), `${question.key} uses {{${tag[1]}}} outside its ${question.scope} filters`);
+    assert.ok(!/`[a-z][a-z0-9-]+\.(DATASET|METADATA)\./.test(text), `${question.key} must not name a project`);
+    assert.doesNotThrow(() => filtersIn(text, options), `${question.key} names only known filters`);
+  }
+});
+
+// Metabase refuses to run a query whose optional filter has no value outside [[ ... ]].
+test('a filter without a default appears only inside an optional clause', () => {
+  for (const question of questions) {
+    const text = sql[question.key];
+    const outside = text.replace(/\[\[[\s\S]*?\]\]/g, '');
+    for (const filter of filtersIn(text, options).filter(f => f.default === undefined && !f.required)) {
+      assert.ok(!outside.includes(`{{${filter.id}}}`), `${question.key} uses {{${filter.id}}} outside [[ ... ]]`);
     }
+  }
+});
+
+test('includes expand once, and comments name no filter', () => {
+  for (const question of questions) {
+    const text = sql[question.key];
+    assert.ok(!/-- @include/.test(text), `${question.key} has an unexpanded include`);
+    for (const comment of text.matchAll(/--[^\n]*/g)) assert.ok(!comment[0].includes('{{'), `${question.key} comment: ${comment[0]}`);
   }
 });

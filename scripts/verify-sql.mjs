@@ -3,7 +3,11 @@
 // expanded the way Metabase expands field filters, using your own `bq` login.
 //
 //   node scripts/verify-sql.mjs --project sm-democo --dataset sm_transformed_v2 \
-//     --store democo --from 2026-09-01 --to 2026-09-30 [--run --max-bytes 104857600]
+//     --metadata-dataset sm_metadata --store democo --from 2026-09-01 --to 2026-09-30 \
+//     [--set compare=year --set country=US] [--run --max-bytes 104857600]
+//
+// Every other filter takes its default; optional filters without one stay unset unless
+// --set gives them a value.
 //
 // Without --run this is a dry run: BigQuery validates names and types and reports the
 // bytes each query would process, and nothing is billed. --run executes each query with
@@ -12,12 +16,14 @@ import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {questions} from '../foundation/questions.mjs';
 import {foundationSql} from '../src/foundation.mjs';
+import {filtersIn} from '../src/filters.mjs';
 
 const {values} = parseArgs({options: {
-  project: {type: 'string'}, dataset: {type: 'string'}, store: {type: 'string'},
+  project: {type: 'string'}, dataset: {type: 'string'}, 'metadata-dataset': {type: 'string', default: 'sm_metadata'}, store: {type: 'string'},
   from: {type: 'string'}, to: {type: 'string'}, 'as-of-month': {type: 'string', default: ''},
   channel: {type: 'string', default: 'online_dtc'}, run: {type: 'boolean', default: false},
   'max-bytes': {type: 'string', default: String(100 * 1024 * 1024)}, only: {type: 'string', default: ''},
+  set: {type: 'string', multiple: true, default: []},
 }});
 const date = /^\d{4}-\d{2}-\d{2}$/;
 if (!values.project || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(values.dataset ?? '') || !values.store ||
@@ -28,23 +34,35 @@ if (!values.project || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(values.dataset ?? '') ||
 const literal = value => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
 const asOf = values['as-of-month'] || `${values.to.slice(0, 7)}-01`;
 
-/** The SQL Metabase sends for one question: its field filters become predicates on the mapped column. */
+const settings = Object.fromEntries(values.set.map(pair => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
+
+/**
+ * The SQL Metabase sends for one question: a field filter becomes a predicate on its
+ * column, a value filter becomes a literal, and an optional clause whose filters are not
+ * all set disappears, as Metabase drops it.
+ */
 function expand(question, sql, {dataset, store, channel, from, to}) {
-  const column = name => `\`${dataset}.${question.table}\`.\`${name}\``;
-  const tags = {
-    date: question.date ? `CAST(${column(question.date)} AS DATE) BETWEEN DATE ${literal(from)} AND DATE ${literal(to)}` : null,
-    channel: `${column('sm_channel')} = ${literal(channel)}`,
-    store: `${column('sm_store_id')} = ${literal(store)}`,
-    ad_platform: null,
-    as_of_month: `DATE ${literal(asOf)}`,
-  };
-  return sql.replaceAll('DATASET', dataset)
-    // An optional clause whose filter is unset disappears, as Metabase drops it.
-    .replace(/\[\[([^\]]*?)\{\{\s*(\w+)\s*\}\}([^\]]*?)\]\]/g, (_m, before, tag, after) => tags[tag] ? `${before}${tags[tag]}${after}` : '')
-    .replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, tag) => {
-      if (!tags[tag]) throw new Error(`${question.key}: required filter ${tag} has no test value.`);
-      return tags[tag];
-    });
+  const home = question.metadata ? values['metadata-dataset'] : dataset;
+  const column = name => `\`${home}.${question.table}\`.\`${name}\``;
+  const tags = {};
+  for (const filter of filtersIn(sql, {store, asOf})) {
+    const value = settings[filter.id] ?? (Array.isArray(filter.default) ? filter.default[0] : filter.default);
+    if (filter.id === 'date') tags.date = `CAST(${column(question.date)} AS DATE) BETWEEN DATE ${literal(from)} AND DATE ${literal(to)}`;
+    else if (filter.id === 'as_of_month') tags.as_of_month = `DATE ${literal(settings.as_of_month ?? asOf)}`;
+    else if (filter.id === 'channel') tags.channel = `${column('sm_channel')} = ${literal(settings.channel ?? channel)}`;
+    else if (filter.id === 'store') tags.store = `${column('sm_store_id')} = ${literal(store)}`;
+    else if (value === undefined) continue;
+    else if (filter.column) tags[filter.id] = filter.type === 'string/contains' ?
+      `STRPOS(LOWER(${column(filter.column)}), LOWER(${literal(value)})) > 0` : `${column(filter.column)} = ${literal(value)}`;
+    else tags[filter.id] = filter.variable === 'number' ? String(Number(value)) : literal(String(value));
+  }
+  const fill = text => text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, tag) => {
+    if (!tags[tag]) throw new Error(`${question.key}: required filter ${tag} has no test value.`);
+    return tags[tag];
+  });
+  return fill(sql.replaceAll('METADATA', values['metadata-dataset']).replaceAll('DATASET', dataset)
+    .replace(/\[\[([\s\S]*?)\]\]/g, (_m, clause) =>
+      [...clause.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].every(m => tags[m[1]]) ? clause : ''));
 }
 
 let failed = 0;

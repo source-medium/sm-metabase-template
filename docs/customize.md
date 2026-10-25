@@ -18,12 +18,18 @@ Edit `foundation/sql/<key>.sql`. Keep the rules the checks enforce:
 - Write the source table as `` `DATASET.table` `` with no alias and no project.
   Metabase's field filters refer to the table by that name; `DATASET` becomes
   your transformed dataset at install time. Join other tables under an alias.
-- Use only the filters the question's scope provides, each optional filter
-  inside `[[AND ...]]`: `{{date}}`, `{{channel}}` and `{{store}}` for summary,
-  product and order questions; `{{date}}` and `{{channel}}` for the stores scope,
-  which compares every store; `{{date}}`, `{{ad_platform}}` and `{{store}}` for
-  paid questions; `{{as_of_month}}`, `{{channel}}` and `{{store}}` for retention.
-  `src/filters.mjs` lists them.
+- Name the filters the question takes as `{{id}}`, from the list in
+  `src/filters.mjs`: field filters such as `{{date}}`, `{{channel}}`,
+  `{{store}}` and `{{ad_platform}}` narrow a column of the source table; value
+  filters such as `{{compare}}`, `{{grain}}` or `{{country}}` are values the SQL
+  reads. A filter without a default goes inside `[[AND ...]]`, which Metabase
+  drops when it is empty. A dashboard shows the filters its cards take, so
+  adding `{{grain}}` to a question adds the Period filter to its dashboards.
+- SQL several questions share lives in `foundation/sql/include/`; a line
+  `-- @include periods` stands for `include/periods.sql`. The `periods`
+  include turns a `selected` CTE (`start_date`, `end_date`) into the comparison
+  periods, following the App Starter's rules; questions with a comparison
+  join their source to it.
 - On `rpt_executive_summary_daily`, wrap order measures (revenue, discounts,
   refunds, order counts, new and repeat orders) in the valid-channel test, as
   the existing files do. Spend and sessions count every row.
@@ -49,7 +55,7 @@ each mapped line with the published definition in
 ## Add a question
 
 1. Add an entry to `questions` with a new `key`, a `name`, its `table`, the
-   `date` column the Date filter maps to, a `scope` and a `description`. List any
+   `date` column the Date filter maps to and a `description`. List any
    joined tables and the columns you read under `requires`: a missing table or
    column then makes the question unavailable instead of broken.
 2. Add `foundation/sql/<key>.sql`.
@@ -57,15 +63,21 @@ each mapped line with the published definition in
 4. Run `node scripts/check.mjs`, then plan and apply.
 
 For a second visualization of the same SQL (a chart beside a table), add a
-`variants` entry, as `retention_curve` and `geography_map` do.
+`variants` entry, as `retention_curve` and `geography_map` do. A number card
+with comparisons uses `display: 'smartscalar'` with `scalar(column)`, which
+reads the question's `compare_<column>` and `compare2_<column>` outputs; a
+table that shows only some columns uses `showing(all, shown)`.
 
 ## Add a tab or dashboard
 
 Each entry in `dashboards()` is installed as its own dashboard and as a tab of
 the combined foundation dashboard, in order. Add one with a new `key`, a `label`
-for its tab, its filters (`filters('summary', options)` or another scope) and
-its cards. Cards sit on Metabase's 24-column grid: `layout(key, row, col, width,
-height)`.
+for its tab and its cards; its filters follow from its cards' SQL. Cards sit on
+Metabase's 24-column grid: `layout(key, row, col, width, height, tab, clicks)`.
+`clicks` makes a column clickable: `{column: 'country', set: {country:
+'country'}}` sets the Shipping country filter from the clicked row, and adding
+`dashboard: 'dashboard:summary'` opens that dashboard (listed earlier) with the
+filter set instead.
 
 ## Remove something
 
