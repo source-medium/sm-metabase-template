@@ -6,7 +6,9 @@ const dimensionSummary = dimensions => (dimensions ?? []).map(d => ({name: d.nam
 
 export async function snapshot(api, options, definitions = []) {
   const version = await api('GET', '/api/session/properties');
-  if (!/^v[01]\.64\./.test(version.version?.tag || '')) throw new Error('This adapter supports Metabase 0.64.x / 1.64.x. No content was changed.');
+  // Versions verified end to end on the demo warehouse: v0.64.1 and v0.65.0-beta
+  // (install, unchanged second plan, every question and dashboard card run).
+  if (!/^v[01]\.6[45]\./.test(version.version?.tag || '')) throw new Error('This installer supports Metabase 0.64 and 0.65 (or 1.64 and 1.65). No content was changed.');
   const target = await api('GET', `/api/collection/${options.collection}`);
   // The target is the parent of the managed subcollection. Passing the managed
   // collection itself would plan a second foundation nested inside the first.

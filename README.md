@@ -54,7 +54,7 @@ explains each one.
 
 ## Before you start
 
-1. **A Metabase on version 0.64.** [Metabase Cloud](https://www.metabase.com/cloud)
+1. **A Metabase on version 0.64 or 0.65.** [Metabase Cloud](https://www.metabase.com/cloud)
    or the free open-source edition on your own server; any edition works.
 2. **A key file.** In your SourceMedium workspace, an editor or admin opens
    **Dashboards & Apps**, chooses **Connect Metabase**, presses **Create key**

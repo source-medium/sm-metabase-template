@@ -36,8 +36,9 @@ It expands each question's filters the way Metabase does and never prints rows.
 
 Before a release, install into a disposable Metabase of each supported version
 on the demo warehouse: plan, apply, open every tab, then confirm a second plan is
-unchanged. The installer refuses Metabase versions it has not been verified on
-(`src/snapshot.mjs`); widen that check only after this pass.
+unchanged, and run every question and dashboard card. The installer refuses
+Metabase versions it has not been verified on (`src/snapshot.mjs`; currently
+v0.64.1 and v0.65.0-beta); widen that check only after this pass.
 
 ## Screenshots and data
 

@@ -120,3 +120,11 @@ test('planning cannot overwrite its credential file, including a symlink alias',
     assert.equal(await readFile(token, 'utf8'), 'private-test-token');
   } finally { await unlink(alias); await unlink(token); await rmdir(folder); }
 });
+
+test('only verified Metabase versions are installed into', async () => {
+  const {snapshot} = await import('../src/snapshot.mjs');
+  for (const [tag, ok] of [['v0.64.1', true], ['v1.64.3', true], ['v0.65.0-beta', true], ['v0.65.2', true], ['v0.63.20', false], ['v0.66.0', false]]) {
+    const api = async path => { if (path === '/api/session/properties') return {version: {tag}}; throw new Error('stop'); };
+    await assert.rejects(snapshot((m, p) => api(p), {collection: 3}), ok ? /stop/ : /supports Metabase 0\.64 and 0\.65/, tag);
+  }
+});

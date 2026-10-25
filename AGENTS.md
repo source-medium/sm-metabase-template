@@ -61,7 +61,7 @@ changes are outside this repository: hand them to the user, who does them in
    Discover IDs and schema from the actual instance; never guess project IDs,
    dataset names, store IDs or currencies. Hand account registration and
    credential entry to the user.
-2. Use Metabase 0.64.x (the installer refuses others). Follow the connection
+2. Use Metabase 0.64 or 0.65 (the installer refuses others). Follow the connection
    guide's steps 1 to 3 with the user's read-only key and both dataset names
    from **Copy dataset and project names**. Keep its scan-cost settings.
 3. Plan, show the user the plan (changes, unsupported metrics, conflicts), and
