@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "component": "sm-metabase-template",
+  "python": null,
+  "tools": ["git", "node", "gcloud"],
+  "bootstrap": [],
+  "required_env": [],
+  "checks": ["node scripts/check.mjs"],
+  "network_domains": [
+    "sts.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "oauth2.googleapis.com",
+    "www.googleapis.com",
+    "bigquery.googleapis.com",
+    "api.github.com"
+  ],
+  "integrations": [],
+  "node": "24.7.0"
+}

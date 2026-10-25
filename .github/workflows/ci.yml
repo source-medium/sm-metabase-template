@@ -1,0 +1,34 @@
+# Checks only: no deployment, no secrets, no pull_request_target. Nothing here
+# touches a Metabase or a warehouse.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: node scripts/check.mjs (Node ${{ matrix.node }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum supported Node and the pinned one. The template itself also
+        # checks Windows, where customers' agents run it too.
+        node: ['22', '24']
+        os: ${{ github.repository == 'source-medium/sm-metabase-template' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node scripts/check.mjs

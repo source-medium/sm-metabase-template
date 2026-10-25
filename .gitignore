@@ -1,0 +1,19 @@
+# Plans list your instance's IDs and definitions; keep them out of a public copy.
+*-plan.json
+plan.json
+
+# Credentials: never commit these. Keep key and token files outside the repository.
+*.key
+*-key.json
+*token*.txt
+.env
+.env.*
+
+# Agent worktrees and tools
+.claude/worktrees/
+/.agent-tools/
+
+# OS and editors
+.DS_Store
+*.log
+node_modules
