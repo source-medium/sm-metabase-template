@@ -43,7 +43,7 @@ export function outputFormat(recipe, alias, metrics) {
 }
 
 export function nativeCard(recipe, sql, options, table, metrics = []) {
-  const parameters = filters({...options, paid: recipe.scope === 'paid', cohort: recipe.scope === 'cohort'});
+  const parameters = filters(recipe.scope, options);
   const tags = {};
   // sm_channel is the sales channel in every report. In the ad report,
   // source_system is the advertising platform that delivered the ad.

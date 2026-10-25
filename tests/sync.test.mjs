@@ -264,3 +264,24 @@ test('the managed subcollection is refused as a target before any write', async 
   await assert.rejects(snapshot(m.api, {...options, collection: installed.ids['collection:foundation']}, d.nodes), /Use its parent collection ID/);
   assert.equal(writes(m.calls.slice(start)).length, 0);
 });
+
+test('a --store install still shows every store on All stores, and other views default to that store', async () => {
+  assert.equal(options.store, 'store-a');
+  const m = fakeMetabase();
+  const definition = definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sql, options);
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const stores = m.cards.get(installed.ids['question:stores']);
+  assert.deepEqual(Object.keys(stores.dataset_query.native['template-tags']).filter(id => !id.startsWith('snippet:')).sort(), ['channel', 'date']);
+  assert.ok(!m.dashboards.get(installed.ids['dashboard:stores']).parameters.some(p => p.id === 'store'));
+  const foundation = m.dashboards.get(installed.ids['dashboard:foundation']);
+  assert.deepEqual(foundation.parameters.find(p => p.id === 'store').default, ['store-a']);
+  const placement = foundation.dashcards.find(c => c.card_id === stores.id);
+  assert.ok(!placement.parameter_mappings.some(p => p.parameter_id === 'store'));
+  const kpis = foundation.dashcards.find(c => c.card_id === installed.ids['question:kpis']);
+  assert.ok(kpis.parameter_mappings.some(p => p.parameter_id === 'store'));
+});
+
+test('a question with an unknown scope is refused instead of getting summary filters', async () => {
+  const {filters} = await import('../src/filters.mjs');
+  assert.throws(() => filters('stoers', options), /Unknown question scope "stoers"/);
+});

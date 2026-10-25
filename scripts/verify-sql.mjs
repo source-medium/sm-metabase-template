@@ -29,7 +29,7 @@ const literal = value => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'
 const asOf = values['as-of-month'] || `${values.to.slice(0, 7)}-01`;
 
 /** The SQL Metabase sends for one question: its field filters become predicates on the mapped column. */
-export function expand(question, sql, {dataset, store, channel, from, to}) {
+function expand(question, sql, {dataset, store, channel, from, to}) {
   const column = name => `\`${dataset}.${question.table}\`.\`${name}\``;
   const tags = {
     date: question.date ? `CAST(${column(question.date)} AS DATE) BETWEEN DATE ${literal(from)} AND DATE ${literal(to)}` : null,

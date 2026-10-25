@@ -8,7 +8,7 @@ export const field = f => ['field', f.id, null];
 // (`sm_channel in ('online_dtc', 'amazon')`) and a boolean column (`is_order_sm_valid`).
 // Anything else stays unsupported rather than approximated.
 const LITERAL = /^[A-Za-z0-9_.-]+$/;
-export function rowFilter(row, columns) {
+function rowFilter(row, columns) {
   const text = (row.filter_condition ?? '').trim();
   const list = /^([A-Za-z_][A-Za-z0-9_]*)\s+in\s+\(([^()]*)\)$/i.exec(text);
   if (list) {

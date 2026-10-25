@@ -4,16 +4,16 @@ import {sqlExpression} from './catalog.mjs';
 import {questions, dashboards, combinedDashboard} from '../foundation/questions.mjs';
 
 /** Each question's SQL, read from foundation/sql/<key>.sql. */
-export function foundationSql(list = questions, directory = new URL('../foundation/sql/', import.meta.url)) {
-  return Object.fromEntries(list.map(question => {
-    try { return [question.key, readFileSync(new URL(`${question.key}.sql`, directory), 'utf8')]; }
+export function foundationSql() {
+  return Object.fromEntries(questions.map(question => {
+    try { return [question.key, readFileSync(new URL(`../foundation/sql/${question.key}.sql`, import.meta.url), 'utf8')]; }
     catch { throw new Error(`Missing foundation/sql/${question.key}.sql.`); }
   }));
 }
 
 // Compose only available dashboards. Questions and calculations are shared with the
 // standalone dashboards, never copied.
-export function combine(layouts, combined = combinedDashboard) {
+function combine(layouts) {
   const parameters = new Map();
   const tabs = [];
   const cards = [];
@@ -27,7 +27,7 @@ export function combine(layouts, combined = combinedDashboard) {
       parameters.set(parameter.id, parameter);
     }
   }
-  return {...combined, parameters: [...parameters.values()], tabs, cards};
+  return {...combinedDashboard, parameters: [...parameters.values()], tabs, cards};
 }
 
 // A question's own table and the tables it joins must be synced with the columns it reads.
@@ -45,7 +45,7 @@ function missingSource(question, tables, dataset) {
 }
 
 // Definition factories use the destination's own IDs. No exported Metabase IDs.
-export function definitions(catalog, tables, sql, options, {list = questions, layouts = dashboards(options), combined = combinedDashboard} = {}) {
+export function definitions(catalog, tables, sql, options) {
   const nodes = [];
   const unavailable = [...catalog.unavailable];
   for (const model of catalog.models) nodes.push({key: model.key, kind: 'card', dependencies: [],
@@ -60,7 +60,7 @@ export function definitions(catalog, tables, sql, options, {list = questions, la
       name: snippetName(metric.name, options), content: sqlExpression(metric, catalog.metrics),
       description: `Canonical metric ${metric.name}, source ${metric.table}, time ${metric.time}. Generated from the warehouse catalog; use on this source table.`})});
   }
-  for (const question of list) {
+  for (const question of questions) {
     const table = tables.find(t => t.schema === options.dataset && t.name === question.table && t.active !== false);
     const missing = missingSource(question, tables, options.dataset);
     if (missing) { unavailable.push({name: question.name, reason: missing}); continue; }
@@ -79,13 +79,13 @@ export function definitions(catalog, tables, sql, options, {list = questions, la
     }});
   }
   const available = [];
-  for (const layout of layouts) {
+  for (const layout of dashboards(options)) {
     if (layout.cards.some(c => !nodes.some(n => n.key === c.key))) {
       unavailable.push({name: layout.name, reason: 'One or more required questions are unavailable.'}); continue;
     }
     available.push(layout);
   }
-  for (const layout of [...available, ...(available.length ? [combine(available, combined)] : [])]) {
+  for (const layout of [...available, ...(available.length ? [combine(available)] : [])]) {
     nodes.push({key: layout.key, kind: 'dashboard', dependencies: layout.cards.map(c => c.key), layout,
       body: ids => ({layout, cards: layout.cards.map(c => ({...c, card_id: ids.get(c.key) || 0}))})});
   }

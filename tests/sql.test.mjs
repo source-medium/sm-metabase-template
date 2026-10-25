@@ -4,6 +4,7 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {compileCatalog, sqlExpression} from '../src/catalog.mjs';
 import {foundationSql} from '../src/foundation.mjs';
 import {questions, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
+import {filters} from '../src/filters.mjs';
 import {foundationTables, documented, options} from './fixtures.mjs';
 
 // The producer snapshot reporting_queries publishes; smstack keeps this copy byte-identical.
@@ -80,7 +81,7 @@ test('field filters see the source table under its unaliased DATASET name', () =
     }
     assert.ok(!/`[a-z][a-z0-9-]+\.DATASET\./.test(text), `${question.key} must not name a project`);
     for (const tag of text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
-      const allowed = question.scope === 'paid' ? ['date', 'ad_platform', 'store'] : question.scope === 'cohort' ? ['as_of_month', 'channel', 'store'] : ['date', 'channel', 'store'];
+      const allowed = filters(question.scope, {}).map(p => p.id);
       assert.ok(allowed.includes(tag[1]), `${question.key} uses {{${tag[1]}}} outside its ${question.scope} filters`);
     }
   }
