@@ -41,8 +41,9 @@ const PROCESSED = 'order_processed_at_local_datetime';
  * One entry per saved question. The SQL is foundation/sql/<key>.sql.
  *
  * - `table` is the source; `date` is the column the Date filter maps to.
- * - `scope` picks the filters: summary, product and orders take Date, Channel and Store;
- *   paid takes Date, Ad platform and Store; cohort takes As-of month, Channel and Store.
+ * - `scope` picks the filters (src/filters.mjs): summary, product and orders take Date,
+ *   Channel and Store; stores takes Date and Channel; paid takes Date, Ad platform and
+ *   Store; cohort takes As-of month, Channel and Store.
  * - `metrics` maps an output alias to a catalog metric (or a [numerator, denominator]
  *   ratio). The installer swaps that output line for the catalog's SQL snippet, so the
  *   question follows SourceMedium's published definition.
@@ -71,7 +72,7 @@ export const questions = [
     description: 'Published order measures, not unique buyers. Classification coverage can prevent reconciliation to headline totals.'},
   {key: 'weekly', name: 'Weekly business review', table: SUMMARY, date: 'date', scope: 'summary',
     description: 'Monday-start weeks; selected dates only. Edge weeks can be partial.', metrics: summaryMetrics},
-  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', scope: 'summary',
+  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', scope: 'stores',
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code']},
     description: 'One row per store, never a cross-store total: stores can report in different currencies. Compare stores that share a currency.',
     metrics: summaryMetrics},
@@ -166,26 +167,26 @@ const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null) => ({key
  * has no tabs of its own.
  */
 export function dashboards(options) {
-  const summary = filters(options);
+  const summary = filters('summary', options);
   return [
     {key: 'dashboard:summary', name: 'SourceMedium executive summary', parameters: summary,
       description: 'Summary-system KPIs, Online DTC by default. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
       tabs: ['Overview', 'Business review'], cards: [layout('kpis', 0, 0, 24, 4, 0), layout('comparison', 4, 0, 24, 5, 0),
         layout('trend', 9, 0, 24, 6, 0), layout('deductions', 15, 0, 10, 7, 0), layout('purchase_mix', 15, 10, 14, 7, 0),
         layout('daily', 0, 0, 24, 8, 1), layout('weekly', 8, 0, 24, 6, 1)]},
-    {key: 'dashboard:stores', label: 'All stores', name: 'SourceMedium all stores', parameters: summary,
+    {key: 'dashboard:stores', label: 'All stores', name: 'SourceMedium all stores', parameters: filters('stores', options),
       description: 'Each store on its own row for the selected dates and channel. No cross-store totals: compare stores that share a currency.',
       tabs: [], cards: [layout('stores', 0, 0, 24, 8)]},
-    {key: 'dashboard:paid', label: 'Paid marketing', name: 'SourceMedium paid marketing', parameters: filters({...options, paid: true}),
+    {key: 'dashboard:paid', label: 'Paid marketing', name: 'SourceMedium paid marketing', parameters: filters('paid', options),
       description: 'Platform-attributed economics by advertising platform (source_system), across all sales channels. Ad platform starts clear.',
       tabs: [], cards: [layout('paid_channel', 0), layout('paid_campaign', 6, 0, 24, 10)]},
-    {key: 'dashboard:creatives', label: 'Creatives', name: 'SourceMedium creatives', parameters: filters({...options, paid: true}),
+    {key: 'dashboard:creatives', label: 'Creatives', name: 'SourceMedium creatives', parameters: filters('paid', options),
       description: 'Creative-level spend and platform-reported results across all sales channels. Ad platform starts clear.',
       tabs: [], cards: [layout('creatives', 0, 0, 24, 12)]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium product quality', parameters: summary,
       description: 'Order-processed-date basis, valid orders: ranked products with signed refunds and cost coverage, and the largest movers against the previous period.',
       tabs: [], cards: [layout('product', 0, 0, 24, 12), layout('product_movers', 12, 0, 24, 10)]},
-    {key: 'dashboard:retention', label: 'Retention', name: 'SourceMedium retention', parameters: filters({...options, cohort: true}),
+    {key: 'dashboard:retention', label: 'Retention', name: 'SourceMedium retention', parameters: filters('cohort', options),
       description: 'Second-purchase curves and denominators at an explicit completed-month cutoff. Keep store/channel/cohort identities separate.',
       tabs: [], cards: [layout('retention_curve', 0, 0, 24, 8), layout('retention', 8, 0, 24, 10)]},
     {key: 'dashboard:geography', label: 'Geography', name: 'SourceMedium geography', parameters: summary,

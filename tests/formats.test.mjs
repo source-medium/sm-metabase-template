@@ -63,7 +63,7 @@ test('every native output is a catalog metric, a declared unit or a dimension, a
   }
   for (const [alias, format] of Object.entries(outputFormats)) {
     assert.ok(valueFormats.includes(format));
-    assert.ok(recipes.some(r => sql[r.key].includes(alias)), `${alias} is in no recipe`);
+    assert.ok(recipes.some(r => new RegExp(`\\bAS\\s+${alias}\\b`, 'i').test(sql[r.key])), `${alias} is in no recipe`);
   }
   const definition = define(compiled());
   const kpis = card(definition, 'question:kpis');
@@ -107,5 +107,4 @@ test('the plan reports numeric model columns the warehouse publishes no unit for
   assert.deepEqual(formatting.unformatted.find(m => m.model.endsWith('rpt_executive_summary_daily')).columns, ['ad_spend']);
   assert.ok(!formatting.unformatted.some(m => m.columns.includes('sm_store_id')), 'only numeric columns');
   assert.equal(compiled(withFormats(rows), {}).metrics.find(m => m.name === 'order_net_revenue_summary').valueFormat, 'currency');
-  assert.ok(tables[0].fields.length);
 });

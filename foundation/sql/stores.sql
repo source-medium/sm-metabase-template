@@ -13,6 +13,6 @@ LEFT JOIN (
   FROM `DATASET.dim_stores`
   GROUP BY sm_store_id
 ) AS stores ON stores.sm_store_id = `DATASET.rpt_executive_summary_daily`.sm_store_id
-WHERE {{date}} [[AND {{channel}}]] [[AND {{store}}]]
+WHERE {{date}} [[AND {{channel}}]]
 GROUP BY store_id
 ORDER BY store_id

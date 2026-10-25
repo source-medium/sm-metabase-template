@@ -20,8 +20,10 @@ Edit `foundation/sql/<key>.sql`. Keep the rules the checks enforce:
   your transformed dataset at install time. Join other tables under an alias.
 - Use only the filters the question's scope provides, each optional filter
   inside `[[AND ...]]`: `{{date}}`, `{{channel}}` and `{{store}}` for summary,
-  product and order questions; `{{date}}`, `{{ad_platform}}` and `{{store}}` for
+  product and order questions; `{{date}}` and `{{channel}}` for the stores scope,
+  which compares every store; `{{date}}`, `{{ad_platform}}` and `{{store}}` for
   paid questions; `{{as_of_month}}`, `{{channel}}` and `{{store}}` for retention.
+  `src/filters.mjs` lists them.
 - On `rpt_executive_summary_daily`, wrap order measures (revenue, discounts,
   refunds, order counts, new and repeat orders) in the valid-channel test, as
   the existing files do. Spend and sessions count every row.
@@ -61,7 +63,7 @@ For a second visualization of the same SQL (a chart beside a table), add a
 
 Each entry in `dashboards()` is installed as its own dashboard and as a tab of
 the combined foundation dashboard, in order. Add one with a new `key`, a `label`
-for its tab, its filters (`summary`, or `filters({...options, paid: true})`) and
+for its tab, its filters (`filters('summary', options)` or another scope) and
 its cards. Cards sit on Metabase's 24-column grid: `layout(key, row, col, width,
 height)`.
 
