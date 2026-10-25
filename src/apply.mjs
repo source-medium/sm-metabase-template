@@ -31,20 +31,19 @@ function mappings(card, id, parameters) {
     const tag = card.dataset_query.native?.['template-tags']?.[p.id];
     // A multi-tab dashboard can have filters this question does not consume.
     if (!questionParameter && !tag) return [];
-    const target = questionParameter?.target || [tag?.type === 'date' ? 'variable' : 'dimension', ['template-tag', p.id]];
+    const target = questionParameter?.target || [tag?.type === 'dimension' ? 'dimension' : 'variable', ['template-tag', p.id]];
     return [{parameter_id: p.id, card_id: id, target}];
   });
 }
 
 async function layoutDashboard(api, existing, node, ids, cards, collectionId, description) {
-  const layout = node.layout;
+  const {layout, cards: placements} = node.body(ids);
   const tabs = layout.tabs.map((name, i) => ({id: existing.tabs?.find(t => t.name === name)?.id || -(i + 1), name, position: i}));
-  const dashcards = layout.cards.map((c, i) => {
-    const id = ids.get(c.key);
-    const prior = existing.dashcards?.find(d => d.card_id === id);
-    return {id: prior?.id || -(i + 1), card_id: id, row: c.row, col: c.col, size_x: c.size_x, size_y: c.size_y,
-      dashboard_tab_id: c.tab === null ? null : tabs[c.tab].id, visualization_settings: {},
-      parameter_mappings: mappings(cards.get(c.key), id, layout.parameters)};
+  const dashcards = placements.map((c, i) => {
+    const prior = existing.dashcards?.find(d => d.card_id === c.card_id);
+    return {id: prior?.id || -(i + 1), card_id: c.card_id, row: c.row, col: c.col, size_x: c.size_x, size_y: c.size_y,
+      dashboard_tab_id: c.tab === null ? null : tabs[c.tab].id, visualization_settings: c.visualization_settings,
+      parameter_mappings: mappings(cards.get(c.key), c.card_id, layout.parameters)};
   });
   return api('PUT', `/api/dashboard/${existing.id}`, {name: layout.name, description, collection_id: collectionId,
     parameters: layout.parameters, tabs, dashcards});

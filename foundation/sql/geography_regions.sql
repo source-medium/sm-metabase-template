@@ -1,67 +1,40 @@
+WITH selected AS (
+  SELECT
+    DATE(MIN(order_processed_at_local_datetime)) AS start_date,
+    DATE(MAX(order_processed_at_local_datetime)) AS end_date
+  FROM `DATASET.obt_orders`
+  WHERE is_order_sm_valid = TRUE
+    AND {{date}} [[AND {{channel}}]] [[AND {{store}}]]
+),
+-- @include periods
+located AS (
+  SELECT
+    periods.position,
+-- @include location
+    sm_order_key,
+    order_net_revenue
+  FROM periods
+  JOIN `DATASET.obt_orders`
+    ON DATE(`DATASET.obt_orders`.order_processed_at_local_datetime) BETWEEN periods.start_date AND periods.end_date
+  WHERE periods.position IN (1, 2) AND is_order_sm_valid = TRUE [[AND {{channel}}]] [[AND {{store}}]]
+),
+regions AS (
+  SELECT position, country, region, COUNTIF(sm_order_key IS NOT NULL) AS orders, SUM(order_net_revenue) AS net_revenue
+  FROM located
+  WHERE TRUE [[AND country = UPPER(TRIM({{country}}))]]
+  GROUP BY position, country, region
+)
 SELECT
-  COALESCE(NULLIF(NULLIF(UPPER(TRIM(order_shipping_country_code)), ''), '(UNKNOWN)'), '(unknown)') AS country,
-  CASE
-    WHEN COALESCE(NULLIF(NULLIF(UPPER(TRIM(order_shipping_country_code)), ''), '(UNKNOWN)'), '(unknown)') = 'US' THEN CASE UPPER(TRIM(order_shipping_state))
-      WHEN 'AL' THEN 'AL' WHEN 'US-AL' THEN 'AL' WHEN 'ALABAMA' THEN 'AL'
-      WHEN 'AK' THEN 'AK' WHEN 'US-AK' THEN 'AK' WHEN 'ALASKA' THEN 'AK'
-      WHEN 'AZ' THEN 'AZ' WHEN 'US-AZ' THEN 'AZ' WHEN 'ARIZONA' THEN 'AZ'
-      WHEN 'AR' THEN 'AR' WHEN 'US-AR' THEN 'AR' WHEN 'ARKANSAS' THEN 'AR'
-      WHEN 'CA' THEN 'CA' WHEN 'US-CA' THEN 'CA' WHEN 'CALIFORNIA' THEN 'CA'
-      WHEN 'CO' THEN 'CO' WHEN 'US-CO' THEN 'CO' WHEN 'COLORADO' THEN 'CO'
-      WHEN 'CT' THEN 'CT' WHEN 'US-CT' THEN 'CT' WHEN 'CONNECTICUT' THEN 'CT'
-      WHEN 'DE' THEN 'DE' WHEN 'US-DE' THEN 'DE' WHEN 'DELAWARE' THEN 'DE'
-      WHEN 'DC' THEN 'DC' WHEN 'US-DC' THEN 'DC' WHEN 'DISTRICT OF COLUMBIA' THEN 'DC'
-      WHEN 'FL' THEN 'FL' WHEN 'US-FL' THEN 'FL' WHEN 'FLORIDA' THEN 'FL'
-      WHEN 'GA' THEN 'GA' WHEN 'US-GA' THEN 'GA' WHEN 'GEORGIA' THEN 'GA'
-      WHEN 'HI' THEN 'HI' WHEN 'US-HI' THEN 'HI' WHEN 'HAWAII' THEN 'HI'
-      WHEN 'ID' THEN 'ID' WHEN 'US-ID' THEN 'ID' WHEN 'IDAHO' THEN 'ID'
-      WHEN 'IL' THEN 'IL' WHEN 'US-IL' THEN 'IL' WHEN 'ILLINOIS' THEN 'IL'
-      WHEN 'IN' THEN 'IN' WHEN 'US-IN' THEN 'IN' WHEN 'INDIANA' THEN 'IN'
-      WHEN 'IA' THEN 'IA' WHEN 'US-IA' THEN 'IA' WHEN 'IOWA' THEN 'IA'
-      WHEN 'KS' THEN 'KS' WHEN 'US-KS' THEN 'KS' WHEN 'KANSAS' THEN 'KS'
-      WHEN 'KY' THEN 'KY' WHEN 'US-KY' THEN 'KY' WHEN 'KENTUCKY' THEN 'KY'
-      WHEN 'LA' THEN 'LA' WHEN 'US-LA' THEN 'LA' WHEN 'LOUISIANA' THEN 'LA'
-      WHEN 'ME' THEN 'ME' WHEN 'US-ME' THEN 'ME' WHEN 'MAINE' THEN 'ME'
-      WHEN 'MD' THEN 'MD' WHEN 'US-MD' THEN 'MD' WHEN 'MARYLAND' THEN 'MD'
-      WHEN 'MA' THEN 'MA' WHEN 'US-MA' THEN 'MA' WHEN 'MASSACHUSETTS' THEN 'MA'
-      WHEN 'MI' THEN 'MI' WHEN 'US-MI' THEN 'MI' WHEN 'MICHIGAN' THEN 'MI'
-      WHEN 'MN' THEN 'MN' WHEN 'US-MN' THEN 'MN' WHEN 'MINNESOTA' THEN 'MN'
-      WHEN 'MS' THEN 'MS' WHEN 'US-MS' THEN 'MS' WHEN 'MISSISSIPPI' THEN 'MS'
-      WHEN 'MO' THEN 'MO' WHEN 'US-MO' THEN 'MO' WHEN 'MISSOURI' THEN 'MO'
-      WHEN 'MT' THEN 'MT' WHEN 'US-MT' THEN 'MT' WHEN 'MONTANA' THEN 'MT'
-      WHEN 'NE' THEN 'NE' WHEN 'US-NE' THEN 'NE' WHEN 'NEBRASKA' THEN 'NE'
-      WHEN 'NV' THEN 'NV' WHEN 'US-NV' THEN 'NV' WHEN 'NEVADA' THEN 'NV'
-      WHEN 'NH' THEN 'NH' WHEN 'US-NH' THEN 'NH' WHEN 'NEW HAMPSHIRE' THEN 'NH'
-      WHEN 'NJ' THEN 'NJ' WHEN 'US-NJ' THEN 'NJ' WHEN 'NEW JERSEY' THEN 'NJ'
-      WHEN 'NM' THEN 'NM' WHEN 'US-NM' THEN 'NM' WHEN 'NEW MEXICO' THEN 'NM'
-      WHEN 'NY' THEN 'NY' WHEN 'US-NY' THEN 'NY' WHEN 'NEW YORK' THEN 'NY'
-      WHEN 'NC' THEN 'NC' WHEN 'US-NC' THEN 'NC' WHEN 'NORTH CAROLINA' THEN 'NC'
-      WHEN 'ND' THEN 'ND' WHEN 'US-ND' THEN 'ND' WHEN 'NORTH DAKOTA' THEN 'ND'
-      WHEN 'OH' THEN 'OH' WHEN 'US-OH' THEN 'OH' WHEN 'OHIO' THEN 'OH'
-      WHEN 'OK' THEN 'OK' WHEN 'US-OK' THEN 'OK' WHEN 'OKLAHOMA' THEN 'OK'
-      WHEN 'OR' THEN 'OR' WHEN 'US-OR' THEN 'OR' WHEN 'OREGON' THEN 'OR'
-      WHEN 'PA' THEN 'PA' WHEN 'US-PA' THEN 'PA' WHEN 'PENNSYLVANIA' THEN 'PA'
-      WHEN 'RI' THEN 'RI' WHEN 'US-RI' THEN 'RI' WHEN 'RHODE ISLAND' THEN 'RI'
-      WHEN 'SC' THEN 'SC' WHEN 'US-SC' THEN 'SC' WHEN 'SOUTH CAROLINA' THEN 'SC'
-      WHEN 'SD' THEN 'SD' WHEN 'US-SD' THEN 'SD' WHEN 'SOUTH DAKOTA' THEN 'SD'
-      WHEN 'TN' THEN 'TN' WHEN 'US-TN' THEN 'TN' WHEN 'TENNESSEE' THEN 'TN'
-      WHEN 'TX' THEN 'TX' WHEN 'US-TX' THEN 'TX' WHEN 'TEXAS' THEN 'TX'
-      WHEN 'UT' THEN 'UT' WHEN 'US-UT' THEN 'UT' WHEN 'UTAH' THEN 'UT'
-      WHEN 'VT' THEN 'VT' WHEN 'US-VT' THEN 'VT' WHEN 'VERMONT' THEN 'VT'
-      WHEN 'VA' THEN 'VA' WHEN 'US-VA' THEN 'VA' WHEN 'VIRGINIA' THEN 'VA'
-      WHEN 'WA' THEN 'WA' WHEN 'US-WA' THEN 'WA' WHEN 'WASHINGTON' THEN 'WA'
-      WHEN 'WV' THEN 'WV' WHEN 'US-WV' THEN 'WV' WHEN 'WEST VIRGINIA' THEN 'WV'
-      WHEN 'WI' THEN 'WI' WHEN 'US-WI' THEN 'WI' WHEN 'WISCONSIN' THEN 'WI'
-      WHEN 'WY' THEN 'WY' WHEN 'US-WY' THEN 'WY' WHEN 'WYOMING' THEN 'WY'
-      ELSE COALESCE(NULLIF(NULLIF(UPPER(TRIM(order_shipping_state)), ''), '(UNKNOWN)'), '(unknown)') END
-    ELSE COALESCE(NULLIF(NULLIF(UPPER(TRIM(order_shipping_state)), ''), '(UNKNOWN)'), '(unknown)')
-  END AS region,
-  COUNTIF(sm_order_key IS NOT NULL) AS orders,
-  SUM(order_net_revenue) AS net_revenue,
-  SAFE_DIVIDE(SUM(order_net_revenue), COUNTIF(sm_order_key IS NOT NULL)) AS net_revenue_per_order
-FROM `DATASET.obt_orders`
-WHERE is_order_sm_valid = TRUE
-  AND {{date}} [[AND {{channel}}]] [[AND {{store}}]]
-GROUP BY country, region
-ORDER BY net_revenue DESC, country, region
+  selection.country,
+  selection.region,
+  selection.orders,
+  selection.net_revenue,
+  SAFE_DIVIDE(selection.net_revenue, selection.orders) AS net_revenue_per_order,
+  comparison.net_revenue AS compare_net_revenue,
+  SAFE_DIVIDE(selection.net_revenue, comparison.net_revenue) - 1 AS net_revenue_change
+FROM regions selection
+LEFT JOIN regions comparison
+  ON comparison.position = 2 AND comparison.country = selection.country AND comparison.region = selection.region
+WHERE selection.position = 1
+ORDER BY selection.net_revenue DESC, selection.country, selection.region
 LIMIT 500

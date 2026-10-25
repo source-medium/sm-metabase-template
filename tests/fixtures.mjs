@@ -37,7 +37,10 @@ export const adTable = {id: 40, name: 'rpt_ad_performance_daily', schema: option
   column('source_system', 44, 'type/Text'), column('ad_spend', 45), column('ad_impressions', 46, 'type/Integer'),
   column('ad_clicks', 47, 'type/Integer'), column('ad_platform_reported_conversions', 48, 'type/Float'),
   column('ad_platform_reported_revenue', 49, 'type/Float'), column('ad_account_id', 50, 'type/Text'), column('ad_campaign_id', 51, 'type/Text'),
-  column('ad_creative_id', 52, 'type/Text'), column('ad_creative_title', 53, 'type/Text'), column('ad_creative_thumbnail_url', 54, 'type/Text')]};
+  column('ad_creative_id', 52, 'type/Text'), column('ad_creative_title', 53, 'type/Text'), column('ad_creative_thumbnail_url', 54, 'type/Text'),
+  ...['ad_campaign_name', 'ad_group_name', 'ad_name', 'ad_campaign_type', 'ad_campaign_tactic', 'ad_creative_body',
+    'ad_creative_call_to_action_type', 'ad_creative_image_url', 'ad_creative_facebook_url', 'ad_creative_instagram_url']
+    .map((name, i) => column(name, 400 + i, 'type/Text'))]};
 const paid = (name, expr, extra = {}) => simple(name, expr, {underlying_model: adTable.name, ...extra});
 const paidRatio = (name, a, b) => paid(name, `${a} / ${b}`, {metric_type: 'ratio', dependent_metrics: `${a}, ${b}`});
 export const paidRows = [paid('total_ad_spend', 'SUM(ad_spend)'), paid('total_ad_impressions', 'SUM(ad_impressions)'),
@@ -49,16 +52,31 @@ export const paidRows = [paid('total_ad_spend', 'SUM(ad_spend)'), paid('total_ad
 
 export const foundationTables = [...tables, adTable,
   {id: 60, name: 'obt_order_lines', schema: options.dataset, active: true, fields: [
-    column('order_processed_at_local_datetime', 61, 'type/DateTime'), column('sm_store_id', 62, 'type/Text'), column('sm_channel', 63, 'type/Text')]},
+    column('order_processed_at_local_datetime', 61, 'type/DateTime'), column('sm_store_id', 62, 'type/Text'), column('sm_channel', 63, 'type/Text'),
+    ...['product_variant_id', 'product_variant_title', 'primary_product_image_url'].map((name, i) => column(name, 600 + i, 'type/Text')),
+    column('order_line_product_cost', 610)]},
   {id: 70, name: 'rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters', schema: options.dataset, active: true,
     fields: [column('sm_store_id', 71, 'type/Text'), column('sm_channel', 72, 'type/Text')]},
   {id: 80, name: 'dim_stores', schema: options.dataset, active: true, fields: [column('sm_store_id', 81, 'type/Text'),
-    column('store_name', 82, 'type/Text'), column('store_currency_code', 83, 'type/Text')]},
+    column('store_name', 82, 'type/Text'), column('store_currency_code', 83, 'type/Text'), column('store_timezone', 84, 'type/Text'),
+    column('brand_name', 85, 'type/Text'), column('store_logo_url', 86, 'type/Text')]},
   {id: 90, name: 'obt_orders', schema: options.dataset, active: true, fields: [
     column('order_processed_at_local_datetime', 91, 'type/DateTime'), column('sm_store_id', 92, 'type/Text'), column('sm_channel', 93, 'type/Text'),
     column('order_shipping_country_code', 94, 'type/Text'), column('order_shipping_state', 95, 'type/Text'),
     column('is_order_sm_valid', 96, 'type/Boolean'), column('order_name', 97, 'type/Text'), column('sm_order_type', 98, 'type/Text'),
-    column('order_payment_status', 99, 'type/Text'), column('sm_utm_source_medium', 100, 'type/Text')]}];
+    column('order_payment_status', 99, 'type/Text'), column('sm_utm_source_medium', 100, 'type/Text'),
+    ...['order_number', 'order_id', 'order_created_at_local_datetime', 'sm_order_sales_channel', 'order_index', 'order_refund_quantity',
+      'order_product_titles_csv', 'order_net_shipping', 'order_total_taxes', 'order_total_revenue', 'order_discount_codes_csv',
+      'order_shipping_country', 'order_cancelled_at_local_datetime', 'order_cancellation_reason'].map((name, i) => column(name, 900 + i, 'type/Text'))]},
+  {id: 110, name: 'fct_order_attribution_signals', schema: options.dataset, active: true, fields: [
+    column('order_processed_at_local_datetime', 111, 'type/DateTime'), column('sm_store_id', 112, 'type/Text'),
+    ...['sm_order_key', 'evidence_source', 'evidence_type', 'sm_utm_final_source_priority', 'sm_marketing_channel',
+      'sm_attribution_inference_method'].map((name, i) => column(name, 113 + i, 'type/Text'))]},
+  // The metadata dataset's catalog and dictionary, which the Data tab reads.
+  {id: 130, name: 'dim_data_dictionary', schema: options.metadataDataset, active: true, fields: [column('sm_store_id', 131, 'type/Text'),
+    column('table_name', 132, 'type/Text'), column('column_name', 133, 'type/Text')]},
+  {id: 140, name: 'dim_semantic_metric_catalog', schema: options.metadataDataset, active: true, fields: [
+    column('metric_name', 141, 'type/Text')]}];
 
 // The executive summary catalog as reporting_queries publishes it since 2026-10-24: order
 // measures count only the valid sales channels (contracts/dashboard-metrics-v1).

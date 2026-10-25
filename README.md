@@ -24,15 +24,25 @@ delivers its tables, so a missing source never hides the others.
 
 | Tab | Questions | Source |
 | --- | --- | --- |
-| Overview | KPIs, period comparison (previous period and same period last year), net revenue vs ad spend, revenue and deductions, new vs repeat purchases | `rpt_executive_summary_daily` |
-| Business review | Daily performance, Monday-start weekly review | `rpt_executive_summary_daily` |
-| All stores | One row per store, never a cross-store total | `rpt_executive_summary_daily`, `dim_stores` |
-| Paid marketing | Ad platform and campaign economics | `rpt_ad_performance_daily` |
-| Creatives | Spend and platform-reported results per creative | `rpt_ad_performance_daily` |
-| Products | Ranked products with refunds and cost coverage; product movers against the previous period | `obt_order_lines` |
-| Retention | Second-purchase curves and lifetime value by acquisition month | `rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters` |
-| Geography | Net revenue map, sales by country and by region | `obt_orders` |
-| Orders | The 500 most recently processed orders, valid or not | `obt_orders` |
+| Overview | Net revenue, orders, ad spend, MER, revenue per order and sessions against two comparison periods; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel and sub-channel contributions | `rpt_executive_summary_daily` |
+| Business review | Revenue and deductions and new vs repeat purchases against the comparison, a business summary by day, week or month, and each store's currency, time zone and latest data date | `rpt_executive_summary_daily`, `dim_stores` |
+| Performance tables | Revenue and orders, marketing efficiency, and new and repeat purchases by day, week or month, plus ad platform delivery and results by period (CPM, CPC, conversion rate) | `rpt_executive_summary_daily`, `rpt_ad_performance_daily` |
+| All stores | One row per store with revenue change and latest data date, never a cross-store total; a store name opens its executive summary | `rpt_executive_summary_daily`, `dim_stores` |
+| Paid marketing | Ad platform economics, a measure over time by platform, spend broken down by platform, campaign, campaign type or tactic against the comparison, and campaigns; a campaign name filters the tab and Creatives | `rpt_ad_performance_daily` |
+| Creatives | The top creatives by a chosen sort with images, minimum spend and conversions | `rpt_ad_performance_daily` |
+| Products | Net revenue and units against both comparisons; products or variants ranked by revenue, units, profit or refunds, or the biggest gainers and decliners, with refund rate and cost coverage | `obt_order_lines` |
+| Retention | Rate (monthly retention or second purchase) and value (gross profit LTV or revenue LTR) curves, all twelve cohorts as heat-shaded matrices, optionally for one acquisition segment | `rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters` |
+| Geography | Revenue, orders and mapped coverage against both comparisons, world and US state maps, countries and regions with revenue change, and a daily trend; a country, then a region, scopes the tab and Orders | `obt_orders` |
+| Orders | The 500 most recently processed orders, all or only valid, searchable by name, number or ID; an order opens its details and attribution evidence | `obt_orders`, `fct_order_attribution_signals` |
+| Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
+
+Comparisons follow the [App Starter](https://github.com/source-medium/sm-app-template):
+**Compare with** and **Second comparison** choose the previous period, the same
+period last year or 52 weeks earlier. The previous period follows what the dates
+are: a single day compares with the same weekday a week earlier, a calendar
+month, quarter or year (complete, or to date) with the one before, and any other
+range with the same number of days just before it. A card whose source your
+warehouse does not deliver is left out without hiding the rest of its tab.
 
 Beside the dashboards, the installer adds:
 
@@ -40,9 +50,9 @@ Beside the dashboards, the installer adds:
   column descriptions and display units.
 - **Metrics** for the catalog definitions Metabase can express exactly, so
   anyone can build a question in the visual editor without SQL.
-- **Shared SQL snippets** generated from the same catalog. The KPI, comparison,
-  trend, daily, weekly, store and paid questions use them, so a definition
-  change reaches every question on the next refresh.
+- **Shared SQL snippets** generated from the same catalog. The summary, store
+  and paid questions use them, so a definition change reaches every question on
+  the next refresh.
 
 Summary order measures (net revenue, gross revenue, discounts, refunds, order
 counts, new and repeat orders) count SourceMedium's valid sales channels:
@@ -151,7 +161,8 @@ Use **Use this template** on GitHub (or a private copy) to keep your changes.
 
 Every card runs a BigQuery job in your warehouse's query project; the Overview
 questions bill about 10 MiB each on the demo, while product, order and cohort
-questions scan more. Metabase runs only the open tab's cards. Keep scheduled
+questions scan more (on the demo, about 1 GB for ranked products and 0.5 GB per
+retention card). Metabase runs only the open tab's cards. Keep scheduled
 filter-value scans off, as the connection guide sets them.
 
 Anyone who can write SQL on the connection can read every dataset the key

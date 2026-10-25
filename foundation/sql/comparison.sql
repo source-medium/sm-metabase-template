@@ -3,17 +3,7 @@ WITH selected AS (
   FROM `DATASET.rpt_executive_summary_daily`
   WHERE {{date}} [[AND {{channel}}]] [[AND {{store}}]]
 ),
-periods AS (
-  SELECT 1 AS position, 'Selected period' AS period, start_date, end_date FROM selected
-  UNION ALL
-  SELECT 2, 'Previous period',
-    DATE_SUB(start_date, INTERVAL DATE_DIFF(end_date, start_date, DAY) + 1 DAY),
-    DATE_SUB(start_date, INTERVAL 1 DAY)
-  FROM selected
-  UNION ALL
-  SELECT 3, 'Same period last year', DATE_SUB(start_date, INTERVAL 1 YEAR), DATE_SUB(end_date, INTERVAL 1 YEAR)
-  FROM selected
-),
+-- @include periods
 totals AS (
   SELECT
     periods.position,
@@ -29,7 +19,7 @@ totals AS (
 ),
 chosen AS (SELECT * FROM totals WHERE position = 1)
 SELECT
-  periods.period,
+  periods.label AS period,
   periods.start_date,
   periods.end_date,
   totals.net_revenue AS period_net_revenue,

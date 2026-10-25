@@ -21,7 +21,8 @@ No dependencies to install. Node.js 22 or later.
 ## Repo map
 
 - `foundation/questions.mjs`: every question, dashboard, column title and unit.
-- `foundation/sql/<key>.sql`: each question's SQL. One file per question key.
+- `foundation/sql/<key>.sql`: each question's SQL. One file per question key;
+  `foundation/sql/include/` holds SQL several questions share.
 - `src/`: the engine (catalog mapping, ownership, plan, apply). Change it only to
   fix the installer, never to add content.
 - `contracts/dashboard-metrics-v1/definitions.json`: SourceMedium's published
@@ -84,7 +85,8 @@ changes are outside this repository: hand them to the user, who does them in
    dashboards. Prefer referencing managed cards from a customer-owned dashboard.
    Keep existing cards, filters, layout, links, subscriptions and access. Map
    filters by meaning: sales Channel, Ad platform and cohort As-of month are
-   different scopes. For a custom copy, remove the `SM_METABASE_V1` line from
+   different scopes, and value filters (Compare with, Period, Shipping country
+   and the rest in `src/filters.mjs`) map only to questions that read them. For a custom copy, remove the `SM_METABASE_V1` line from
    the copy only.
 5. Apply the approved plan, then only the approved dashboard additions.
 
@@ -128,7 +130,8 @@ access can also compile every question with `node scripts/verify-sql.mjs`
 - Open native questions individually and on their dashboards: required Date,
   optional Store, cleared Channel and each tab's filter mappings. Sales Channel
   does not filter paid marketing or creatives; Ad platform does. Retention uses
-  As-of month, not Date.
+  As-of month, not Date. Try another Compare with, a Period of Week, and the
+  clicks: a campaign name, a country then a region, an order.
 - Compare a KPI with the catalog definition for the same scope; ratios are
   ratios of sums, and a zero denominator is blank.
 - Generate a second plan with the same options: expect unchanged content,

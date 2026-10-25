@@ -1,7 +1,7 @@
 import {bind, field} from './catalog.mjs';
 import {scopeFor} from './ownership.mjs';
 import {modelColumnFormat, columnSettings} from './formats.mjs';
-import {filters} from './filters.mjs';
+import {filtersIn} from './filters.mjs';
 import {columnTitles, outputFormats} from '../foundation/questions.mjs';
 
 export function modelCard(model, database, dataset = model.schema) {
@@ -37,34 +37,59 @@ export function metricCard(metric, model, database, modelId, metricIds) {
       aggregation: [bind(metric.calculation, model.columns, metricIds)]}}};
 }
 
+/** Every name the SQL gives with AS, outside comments. */
+export const outputAliases = sql => [...sql.replace(/--[^\n]*/g, '').matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b/gi)].map(m => m[1]);
+
+// A comparison output (compare_net_revenue, compare2_net_revenue) displays like its base.
 export function outputFormat(recipe, alias, metrics) {
   const metric = recipe.metrics?.[alias];
-  return typeof metric === 'string' ? metrics.find(m => m.name === metric)?.valueFormat ?? null : outputFormats[alias] ?? null;
+  if (typeof metric === 'string') return metrics.find(m => m.name === metric)?.valueFormat ?? null;
+  if (Array.isArray(metric)) return outputFormats[alias] ?? null;
+  if (alias in outputFormats) return outputFormats[alias];
+  const base = /^compare2?_(.+)$/.exec(alias)?.[1];
+  return base ? outputFormat(recipe, base, metrics) : null;
+}
+
+// A comparison output takes its base column's title, marked with the comparison it shows.
+function titleOf(name) {
+  if (columnTitles[name]) return columnTitles[name];
+  const [, slot, base] = /^(compare2?)_(.+)$/.exec(name) || [];
+  return base && columnTitles[base] ? `${columnTitles[base]} (${slot === 'compare' ? 'comparison' : 'second comparison'})` : null;
+}
+
+// The filters the SQL names become its template tags: a field filter on a column of the
+// question's own table, or a value the SQL reads.
+function templateTags(recipe, sql, options, table) {
+  const tags = {};
+  for (const filter of filtersIn(sql, options)) {
+    const common = {id: filter.id, name: filter.id, 'display-name': filter.name, required: !!filter.required};
+    if (filter.variable) {
+      // A variable takes one value; its dashboard filter keeps Metabase's list form.
+      const value = Array.isArray(filter.default) ? filter.default[0] : filter.default;
+      tags[filter.id] = {...common, type: filter.variable, ...(value === undefined ? {} : {default: value})};
+      continue;
+    }
+    const name = filter.column === 'date' ? recipe.date : filter.column;
+    const column = table.fields.find(f => f.name === name && f.active !== false);
+    if (!column) throw new Error(`Missing ${recipe.table} filter column ${name}.`);
+    tags[filter.id] = {...common, type: 'dimension', dimension: field(column), 'widget-type': filter.type,
+      ...(filter.default === undefined ? {} : {default: filter.default})};
+  }
+  return tags;
 }
 
 export function nativeCard(recipe, sql, options, table, metrics = []) {
-  const parameters = filters(recipe.scope, options);
-  const tags = {};
-  // sm_channel is the sales channel in every report. In the ad report,
-  // source_system is the advertising platform that delivered the ad.
-  const columns = {date: recipe.date, store: 'sm_store_id', channel: 'sm_channel', ad_platform: 'source_system'};
-  for (const p of parameters) {
-    const basic = p.id === 'as_of_month';
-    const column = basic ? null : table.fields.find(f => f.name === columns[p.id]);
-    if (!basic && !column) throw new Error(`Missing ${recipe.table} filter column.`);
-    tags[p.id] = {id: p.id, name: p.id, 'display-name': p.name, type: basic ? 'date' : 'dimension',
-      ...(basic ? {} : {dimension: field(column), 'widget-type': p.type}), required: !!p.required,
-      ...(p.default === undefined ? {} : {default: p.default})};
-  }
-  const aliases = [...sql.matchAll(/\bAS\s+([A-Za-z_][A-Za-z0-9_]*)\b/gi)].map(m => m[1]);
-  const column_settings = Object.fromEntries([...new Set([...Object.keys(columnTitles), ...aliases])].flatMap(name => {
-    const settings = {...(columnTitles[name] ? {column_title: columnTitles[name]} : {}), ...columnSettings(outputFormat(recipe, name, metrics))};
+  const tags = templateTags(recipe, sql, options, table);
+  const column_settings = Object.fromEntries([...new Set([...Object.keys(columnTitles), ...outputAliases(sql)])].flatMap(name => {
+    const title = titleOf(name);
+    const settings = {...(title ? {column_title: title} : {}), ...columnSettings(outputFormat(recipe, name, metrics)),
+      ...recipe.columns?.[name]};
     return Object.keys(settings).length ? [[JSON.stringify(['name', name]), settings]] : [];
   }));
   return {name: recipe.name, type: 'question', display: recipe.display || 'table', parameters: [],
     description: recipe.description, visualization_settings: {column_settings, ...(recipe.settings || {})},
     dataset_query: {database: options.database, type: 'native', native: {
-      query: sql.replaceAll('DATASET', options.dataset), 'template-tags': tags}}};
+      query: sql.replaceAll('METADATA', options.metadataDataset).replaceAll('DATASET', options.dataset), 'template-tags': tags}}};
 }
 
 export const snippetName = (metric, options) => `SM ${scopeFor(options).slice(0, 8)} ${metric}`;

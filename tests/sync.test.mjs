@@ -6,28 +6,34 @@ import {snapshot, makePlan} from '../src/snapshot.mjs';
 import {applyPlan} from '../src/apply.mjs';
 import {marker, stamp, prose} from '../src/ownership.mjs';
 import {rows, tables, options, fakeMetabase, documented, foundationTables, paidRows} from './fixtures.mjs';
+import {dashboards} from '../foundation/questions.mjs';
 
 const sql = foundationSql();
 const define = (data = rows) => ({...definitions(compileCatalog(data, tables, options.dataset, documented(tables)), tables, sql, options), unsupported: []});
 async function plan(api, definition) { return makePlan(definition, await snapshot(api, options, definition.nodes), options); }
 const writes = calls => calls.filter(c => c.method !== 'GET');
 
-test('the nine-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
+const full = () => definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sql, options);
+
+test('the eleven-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
   const m = fakeMetabase();
-  const definition = definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sql, options);
+  const definition = full();
+  assert.deepEqual(definition.unavailable, []);
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'All stores', 'Paid marketing', 'Creatives',
-    'Products', 'Retention', 'Geography', 'Orders']);
-  assert.equal(dashboard.dashcards.length, 19);
-  assert.equal(new Set(dashboard.dashcards.map(c => c.card_id)).size, 19);
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables', 'All stores', 'Paid marketing',
+    'Creatives', 'Products', 'Retention', 'Geography', 'Orders', 'Data']);
+  const placed = dashboards().flatMap(d => d.cards).length;
+  assert.equal(dashboard.dashcards.length, placed);
+  assert.equal(new Set(dashboard.dashcards.map(c => c.card_id)).size, placed);
   for (const placement of dashboard.dashcards) {
     const card = m.cards.get(placement.card_id);
-    const tagIds = Object.keys(card.dataset_query.native['template-tags']).filter(id => !id.startsWith('snippet:'));
+    const tags = card.dataset_query.native['template-tags'];
+    const tagIds = Object.keys(tags).filter(id => !id.startsWith('snippet:'));
     assert.deepEqual(placement.parameter_mappings.map(p => p.parameter_id).sort(), tagIds.sort());
     for (const mapping of placement.parameter_mappings) {
       assert.equal(mapping.card_id, card.id);
-      assert.deepEqual(mapping.target, [mapping.parameter_id === 'as_of_month' ? 'variable' : 'dimension', ['template-tag', mapping.parameter_id]]);
+      assert.deepEqual(mapping.target, [tags[mapping.parameter_id].type === 'dimension' ? 'dimension' : 'variable', ['template-tag', mapping.parameter_id]]);
     }
     assert.ok([...m.dashboards.values()].some(d => d.id !== dashboard.id && d.dashcards.some(c => c.card_id === card.id)));
   }
@@ -40,14 +46,36 @@ test('the nine-tab foundation reuses questions and maps only each question\'s ac
   assert.deepEqual(m.dashboards.get(dashboard.id), original);
 });
 
-test('unavailable optional sources do not hide the available foundation tabs or create empty tabs', async () => {
+test('clicks set filters on the same dashboard, or open another dashboard with its filters set', async () => {
+  const m = fakeMetabase();
+  const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const click = (dashboard, question, column) => m.dashboards.get(installed.ids[dashboard]).dashcards
+    .find(c => c.card_id === installed.ids[`question:${question}`]).visualization_settings.column_settings[JSON.stringify(['name', column])].click_behavior;
+  const set = (id, column) => ({id, source: {type: 'column', id: column, name: column}, target: {type: 'parameter', id}});
+  assert.deepEqual(click('dashboard:geography', 'geography_regions', 'region'),
+    {type: 'crossfilter', parameterMapping: {country: set('country', 'country'), region: set('region', 'region')}});
+  assert.deepEqual(click('dashboard:orders', 'orders', 'order_name'), {type: 'crossfilter', parameterMapping: {order: set('order', 'order_key')}});
+  for (const dashboard of ['dashboard:stores', 'dashboard:foundation']) {
+    assert.deepEqual(click(dashboard, 'stores', 'store_name'),
+      {type: 'link', linkType: 'dashboard', targetId: installed.ids['dashboard:summary'], parameterMapping: {store: set('store', 'store_id')}});
+  }
+  // A filter the dashboard does not have is left out of the click.
+  const paid = definition.nodes.find(n => n.key === 'dashboard:paid');
+  assert.ok(paid.layout.parameters.some(p => p.id === 'campaign'));
+});
+
+test('unavailable optional sources leave out only their cards and empty tabs', async () => {
   const m = fakeMetabase(); const definition = define();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review']);
-  assert.equal(dashboard.dashcards.length, 7);
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables']);
+  assert.ok(!dashboard.dashcards.some(c => c.card_id === installed.ids['question:store_context']));
   assert.ok(definition.unavailable.some(item => item.name === 'All stores' && /dim_stores/.test(item.reason)));
+  assert.ok(definition.unavailable.some(item => item.name === 'Reporting context' && /not synced/.test(item.reason)));
   assert.ok(definition.unavailable.some(item => item.name === 'SourceMedium paid marketing'));
+  const performance = m.dashboards.get(installed.ids['dashboard:performance']);
+  assert.equal(performance.dashcards.length, 3, 'the platform table needs the ad report');
   const empty = definitions({models: [], metrics: [], unavailable: []}, [], sql, options);
   assert.ok(!empty.nodes.some(n => n.key === 'dashboard:foundation'));
 });
@@ -56,7 +84,7 @@ test('adding optional foundation tabs preserves existing dashboard, tab and plac
   const m = fakeMetabase(); const initial = define();
   const installed = await applyPlan(m.api, initial, options, await plan(m.api, initial));
   const original = structuredClone(m.dashboards.get(installed.ids['dashboard:foundation']));
-  const expanded = definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sql, options);
+  const expanded = full();
   await applyPlan(m.api, expanded, options, await plan(m.api, expanded));
   const dashboard = m.dashboards.get(original.id);
   for (const tab of original.tabs) assert.equal(dashboard.tabs.find(t => t.name === tab.name).id, tab.id);
@@ -268,10 +296,11 @@ test('the managed subcollection is refused as a target before any write', async 
 test('a --store install still shows every store on All stores, and other views default to that store', async () => {
   assert.equal(options.store, 'store-a');
   const m = fakeMetabase();
-  const definition = definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sql, options);
+  const definition = full();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const stores = m.cards.get(installed.ids['question:stores']);
-  assert.deepEqual(Object.keys(stores.dataset_query.native['template-tags']).filter(id => !id.startsWith('snippet:')).sort(), ['channel', 'date']);
+  assert.deepEqual(Object.keys(stores.dataset_query.native['template-tags']).filter(id => !id.startsWith('snippet:')).sort(),
+    ['channel', 'compare', 'compare2', 'date']);
   assert.ok(!m.dashboards.get(installed.ids['dashboard:stores']).parameters.some(p => p.id === 'store'));
   const foundation = m.dashboards.get(installed.ids['dashboard:foundation']);
   assert.deepEqual(foundation.parameters.find(p => p.id === 'store').default, ['store-a']);
@@ -281,7 +310,7 @@ test('a --store install still shows every store on All stores, and other views d
   assert.ok(kpis.parameter_mappings.some(p => p.parameter_id === 'store'));
 });
 
-test('a question with an unknown scope is refused instead of getting summary filters', async () => {
-  const {filters} = await import('../src/filters.mjs');
-  assert.throws(() => filters('stoers', options), /Unknown question scope "stoers"/);
+test('a question naming an unknown filter is refused instead of running unfiltered', async () => {
+  const {filtersIn} = await import('../src/filters.mjs');
+  assert.throws(() => filtersIn('WHERE {{stoer}}', options), /Unknown foundation filter \{\{stoer\}\}/);
 });

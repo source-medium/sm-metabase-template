@@ -1,0 +1,32 @@
+SELECT
+  order_name,
+  order_id,
+  order_processed_at_local_datetime AS processed_at,
+  order_created_at_local_datetime AS created_at,
+  CONCAT(IFNULL(sm_channel, '(none)'), IFNULL(CONCAT(' / ', sm_sub_channel), '')) AS channel,
+  sm_order_sales_channel AS sales_channel,
+  source_system,
+  sm_order_type AS order_type,
+  order_index AS customer_order_number,
+  order_payment_status AS payment_status,
+  order_cart_quantity AS cart_units,
+  order_refund_quantity AS refunded_units,
+  order_product_titles_csv AS products,
+  order_gross_revenue AS gross_revenue,
+  order_discounts AS discounts,
+  order_refunds AS refunds,
+  order_net_revenue AS net_revenue,
+  order_net_shipping AS shipping,
+  order_total_taxes AS taxes,
+  order_total_revenue AS total_revenue,
+  order_discount_codes_csv AS discount_codes,
+  CONCAT(IFNULL(order_shipping_state, '(unknown)'), ', ', IFNULL(order_shipping_country, '(unknown)')) AS ships_to,
+  sm_utm_source_medium AS source_medium,
+  sm_utm_campaign AS utm_campaign,
+  is_order_sm_valid AS is_valid,
+  order_cancelled_at_local_datetime AS cancelled_at,
+  order_cancellation_reason AS cancellation_reason,
+  sm_order_key AS order_key
+FROM `DATASET.obt_orders`
+WHERE {{date}} AND (FALSE [[OR sm_order_key = {{order}}]]) [[AND {{store}}]]
+LIMIT 1

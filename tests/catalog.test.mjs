@@ -70,7 +70,8 @@ test('native cards consume canonical snippets and preserve required dates and op
   const card = d.nodes.find(n => n.key === 'question:kpis').body(ids);
   const tags = card.dataset_query.native['template-tags'];
   assert.equal(tags.date.required, true);
-  assert.equal(tags.date.default, 'past30days');
+  assert.equal(tags.date.default, 'past28days');
+  assert.deepEqual(tags.compare, {id: 'compare', name: 'compare', 'display-name': 'Compare with', required: true, type: 'text', default: 'previous'});
   assert.deepEqual(tags.channel.default, ['online_dtc']);
   assert.ok(card.dataset_query.native.query.includes('snippet: SM'));
   assert.ok(card.dataset_query.native.query.includes('[[AND {{channel}}]]'));
@@ -97,7 +98,8 @@ test('paid questions filter and group by the advertising platform, not the sales
     assert.equal(native['template-tags'].channel, undefined);
     assert.match(native.query, /GROUP BY source_system/);
   }
-  assert.deepEqual(d.nodes.find(n => n.key === 'dashboard:paid').layout.parameters.map(p => p.id), ['date', 'ad_platform', 'store']);
+  assert.deepEqual(d.nodes.find(n => n.key === 'dashboard:paid').layout.parameters.map(p => p.id),
+    ['date', 'ad_platform', 'store', 'compare', 'compare2', 'grain', 'campaign', 'ad_set', 'ad', 'paid_metric', 'breakdown']);
 });
 
 // reporting_queries #2377 (2026-10-24) filtered the summary order measures to valid sales
@@ -120,7 +122,7 @@ test('a column-list filter compiles to a conditional sum in metrics, snippets an
   // Observed on Metabase v0.64.1: the conditional sum's column carries its input's name.
   assert.deepEqual(Object.keys(card.visualization_settings.column_settings), [JSON.stringify(['name', 'sum_where_order_net_revenue'])]);
   const built = definitions(catalog, tables, foundationSql(), options);
-  for (const key of ['question:kpis', 'question:comparison', 'question:trend', 'question:daily', 'question:weekly', 'dashboard:summary', 'dashboard:foundation']) {
+  for (const key of ['question:kpis', 'question:comparison', 'question:trend', 'question:business', 'dashboard:summary', 'dashboard:foundation']) {
     assert.ok(built.nodes.some(n => n.key === key), key);
   }
 });
