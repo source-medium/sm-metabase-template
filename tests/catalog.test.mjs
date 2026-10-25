@@ -117,7 +117,8 @@ test('a column-list filter compiles to a conditional sum in metrics, snippets an
   const card = metricCard({...net, valueFormat: 'currency'}, model, options.database, 99, new Map());
   assert.deepEqual(card.dataset_query.query.aggregation, [['sum-where', ['field', 4, null],
     ['=', ['field', 3, null], 'online_dtc', 'amazon', 'retail', 'wholesale', 'tiktok_shop']]]);
-  assert.deepEqual(Object.keys(card.visualization_settings.column_settings), [JSON.stringify(['name', 'sum_where'])]);
+  // Observed on Metabase v0.64.1: the conditional sum's column carries its input's name.
+  assert.deepEqual(Object.keys(card.visualization_settings.column_settings), [JSON.stringify(['name', 'sum_where_order_net_revenue'])]);
   const built = definitions(catalog, tables, foundationSql(), options);
   for (const key of ['question:kpis', 'question:comparison', 'question:trend', 'question:daily', 'question:weekly', 'dashboard:summary', 'dashboard:foundation']) {
     assert.ok(built.nodes.some(n => n.key === key), key);

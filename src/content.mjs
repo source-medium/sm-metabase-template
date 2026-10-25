@@ -20,14 +20,16 @@ export function modelCard(model, database, dataset = model.schema) {
     })};
 }
 
-// Metabase names a metric's result column after its aggregation.
-const resultColumn = {'/': 'expression', distinct: 'count', count: 'count', sum: 'sum', 'sum-where': 'sum_where', avg: 'avg', min: 'min', max: 'max'};
+// Metabase names a metric's result column after its aggregation; a conditional sum
+// also names its column (v0.64.1 returns `sum_where_order_net_revenue`).
+const resultColumn = ([fn, input]) => fn === 'sum-where' ? `sum_where_${input.field}` :
+  {'/': 'expression', distinct: 'count', count: 'count', sum: 'sum', avg: 'avg', min: 'min', max: 'max'}[fn];
 
 // The catalog's own unit, so a metric displays correctly even where its model column
 // carries none, and a ratio, which inherits nothing, displays at all.
 export function metricCard(metric, model, database, modelId, metricIds) {
   const settings = columnSettings(metric.valueFormat);
-  const column = JSON.stringify(['name', resultColumn[metric.calculation[0]]]);
+  const column = JSON.stringify(['name', resultColumn(metric.calculation)]);
   return {name: metric.label, type: 'metric', display: 'line', parameters: [],
     visualization_settings: Object.keys(settings).length ? {column_settings: {[column]: settings}} : {},
     description: `${metric.description}\nCanonical metric: ${metric.name}. Definition source: sm_metadata.dim_semantic_metric_catalog. Calculation: ${metric.canonical.calculation}. Time: ${metric.time}. Refresh with the SourceMedium adapter to check for definition drift.`,

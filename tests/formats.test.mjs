@@ -72,7 +72,7 @@ test('every native output is a catalog metric, a declared unit or a dimension, a
   assert.deepEqual(setting(kpis, 'summary_orders'), {column_title: 'Summary orders'});
   assert.deepEqual(setting(card(definition, 'question:paid_channel'), 'click_through_rate'),
     {column_title: 'Click-through rate', number_style: 'percent'});
-  assert.equal(setting(card(definition, 'question:paid_channel'), 'clicks'), undefined, 'no forced decimals on counts');
+  assert.deepEqual(setting(card(definition, 'question:paid_channel'), 'clicks'), {column_title: 'Clicks'}, 'no forced decimals on counts');
 });
 
 test('an install made before formats were published upgrades in place, then plans unchanged', async () => {
@@ -81,7 +81,7 @@ test('an install made before formats were published upgrades in place, then plan
   assert.equal(unformatted.formatting.published, false);
   assert.match(unformatted.formatting.note, /catalog-mapped outputs are unformatted/);
   assert.deepEqual(setting(card(unformatted, 'question:kpis'), 'net_revenue'), {column_title: 'Net revenue'});
-  assert.deepEqual(setting(card(unformatted, 'question:retention'), 'second_purchase_rate'), {number_style: 'percent'});
+  assert.deepEqual(setting(card(unformatted, 'question:retention'), 'second_purchase_rate'), {column_title: 'Second-purchase rate', number_style: 'percent'});
   await applyPlan(m.api, unformatted, options, await plan(m.api, unformatted));
   // Installs made before this adapter formatted anything recorded content digests
   // without a settings key; an unformatted model must still project exactly that, or
