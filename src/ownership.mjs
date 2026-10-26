@@ -61,19 +61,49 @@ export function cardContent(card) {
   return result;
 }
 
-export function dashboardContent(dashboard) {
+// Metabase returns a dashboard's cards in storage order, and a Postgres application
+// database reorders them whenever it rewrites the rows (saving a card that sits on the
+// dashboard does). So a dashboard's content lists cards, and each card's filter mappings,
+// in a fixed order: storage order is never an edit. `stored: true` keeps Metabase's order,
+// which is how installs made before this recorded their content.
+const byPlacement = (a, b) => a.card_id - b.card_id || (a.dashboard_tab_id ?? 0) - (b.dashboard_tab_id ?? 0) || a.row - b.row || a.col - b.col;
+const byFilter = (a, b) => String(a.parameter_id).localeCompare(String(b.parameter_id));
+export function dashboardContent(dashboard, {stored = false} = {}) {
+  const dashcards = (dashboard.dashcards ?? []).map(c => ({card_id: c.card_id, row: c.row, col: c.col,
+    size_x: c.size_x, size_y: c.size_y, dashboard_tab_id: c.dashboard_tab_id,
+    parameter_mappings: stored ? c.parameter_mappings : [...(c.parameter_mappings ?? [])].sort(byFilter),
+    visualization_settings: c.visualization_settings ?? {}}));
+  const tabs = (dashboard.tabs ?? []).map(t => ({name: t.name, position: t.position}));
   return {name: dashboard.name, collection_id: dashboard.collection_id ?? null,
     description: prose(dashboard.description), parameters: dashboard.parameters,
-    tabs: (dashboard.tabs ?? []).map(t => ({name: t.name, position: t.position})),
-    dashcards: (dashboard.dashcards ?? []).map(c => ({card_id: c.card_id, row: c.row, col: c.col,
-      size_x: c.size_x, size_y: c.size_y, dashboard_tab_id: c.dashboard_tab_id,
-      parameter_mappings: c.parameter_mappings, visualization_settings: c.visualization_settings ?? {}}))};
+    tabs: stored ? tabs : tabs.sort((a, b) => a.position - b.position),
+    dashcards: stored ? dashcards : dashcards.sort(byPlacement)};
 }
 
-export function actionFor(existing, sourceHash, content) {
+// The readings an install made before cards were ordered may have recorded: Metabase's
+// order then, which was creation order right after a write, or storage order.
+export const recordedDashboardContents = dashboard => [dashboardContent(dashboard, {stored: true}),
+  dashboardContent({...dashboard, dashcards: [...(dashboard.dashcards ?? [])].sort((a, b) => a.id - b.id)}, {stored: true})];
+
+// What a dashboard shows, independent of the IDs Metabase assigned: each card's tab by
+// position. The plan compares this with what the definition would write.
+export function placedContent(dashboard) {
+  const position = new Map((dashboard.tabs ?? []).map(t => [t.id, t.position]));
+  const {dashcards, ...content} = dashboardContent(dashboard);
+  return {...content, dashcards: dashcards.map(({dashboard_tab_id: tab, parameter_mappings, ...c}) => ({...c,
+    tab: tab == null ? null : position.get(tab) ?? null,
+    parameter_mappings: parameter_mappings.map(m => ({parameter_id: m.parameter_id, card_id: m.card_id, target: m.target}))}))
+    .sort((a, b) => a.card_id - b.card_id || (a.tab ?? -1) - (b.tab ?? -1) || a.row - b.row || a.col - b.col)};
+}
+
+// `content` reads an object's writable content; `recorded` lists other readings an older
+// install may have recorded (a dashboard's cards in Metabase's order).
+export function actionFor(existing, sourceHash, content, recorded = () => []) {
   if (!existing) return {action: 'create'};
   if (existing.archived) return {action: 'conflict', reason: 'Archived content is preserved; restore it before updating.'};
   const saved = marker(existing.description);
-  if (!saved || digest(content(existing)) !== saved.content) return {action: 'conflict', reason: 'Customer edits or incomplete prior apply; preserved.'};
+  if (!saved || ![content(existing), ...recorded(existing)].some(c => digest(c) === saved.content)) {
+    return {action: 'conflict', reason: 'Customer edits or incomplete prior apply; preserved.'};
+  }
   return {action: saved.source === sourceHash ? 'unchanged' : 'update'};
 }

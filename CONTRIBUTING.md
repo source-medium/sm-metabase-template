@@ -39,7 +39,11 @@ filters stay unset unless set.
 
 Before a release, install into a disposable Metabase of each supported version
 on the demo warehouse: plan, apply, open every tab, then confirm a second plan is
-unchanged, and run every question and dashboard card. The installer refuses
+unchanged, and run every question and dashboard card. Give that Metabase a
+Postgres application database, as Metabase Cloud and the demo have: the default
+H2 database keeps a dashboard's cards in creation order and hides storage-order
+differences. Also upgrade an install of the previous release, the path every
+existing customer takes. The installer refuses
 Metabase versions it has not been verified on (`src/snapshot.mjs`; currently
 v0.64.1 and v0.65.0-beta); widen that check only after this pass.
 

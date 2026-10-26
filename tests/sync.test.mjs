@@ -4,7 +4,7 @@ import {compileCatalog} from '../src/catalog.mjs';
 import {definitions, foundationSql} from '../src/foundation.mjs';
 import {snapshot, makePlan} from '../src/snapshot.mjs';
 import {applyPlan} from '../src/apply.mjs';
-import {marker, stamp, prose} from '../src/ownership.mjs';
+import {marker, stamp, prose, digest, dashboardContent} from '../src/ownership.mjs';
 import {rows, tables, options, fakeMetabase, documented, foundationTables, paidRows} from './fixtures.mjs';
 import {dashboards} from '../foundation/questions.mjs';
 
@@ -63,6 +63,56 @@ test('clicks set filters on the same dashboard, or open another dashboard with i
   // A filter the dashboard does not have is left out of the click.
   const paid = definition.nodes.find(n => n.key === 'dashboard:paid');
   assert.ok(paid.layout.parameters.some(p => p.id === 'campaign'));
+});
+
+// Metabase on a Postgres application database returns a dashboard's cards in storage order,
+// which changes when it rewrites the rows, as saving a card on the dashboard does. Seen on the
+// public demo on 2026-10-25: an upgrade stopped with "Content changed during apply", or
+// stamped a read that a later one reordered and planned the next refresh as a customer edit.
+test('dashboard cards read back in another order are never a change or a customer edit', async () => {
+  const m = fakeMetabase(); m.reorderDashcards(true);
+  const initial = define();
+  await applyPlan(m.api, initial, options, await plan(m.api, initial));
+  assert.ok((await plan(m.api, initial)).actions.every(a => a.action === 'unchanged'));
+  const expanded = full();
+  const upgrade = await plan(m.api, expanded);
+  assert.ok(upgrade.actions.some(a => a.key === 'dashboard:foundation' && a.action === 'update'));
+  await applyPlan(m.api, expanded, options, upgrade);
+  for (let i = 0; i < 2; i++) assert.ok((await plan(m.api, expanded)).actions.every(a => a.action === 'unchanged'));
+});
+
+test('an install recorded with cards in Metabase\'s order still plans unchanged', async () => {
+  const m = fakeMetabase(); const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
+  const saved = marker(dashboard.description);
+  // Recorded in creation order, then stored in another: the earlier release's demo install.
+  const created = digest(dashboardContent(dashboard, {stored: true}));
+  dashboard.dashcards.reverse();
+  assert.notEqual(created, digest(dashboardContent(dashboard)), 'the fixture must differ only in order');
+  for (const content of [created, digest(dashboardContent(dashboard, {stored: true}))]) {
+    dashboard.description = stamp(dashboard.description, {...saved, content});
+    assert.ok((await plan(m.api, definition)).actions.every(a => a.action === 'unchanged'));
+  }
+});
+
+test('a stale ownership record on a dashboard that matches its definition is refreshed; an edit is preserved', async () => {
+  const m = fakeMetabase(); const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
+  const stale = description => stamp(description, {...marker(description), content: '0'.repeat(64)});
+  dashboard.description = stale(dashboard.description);
+  const refresh = await plan(m.api, definition);
+  assert.deepEqual(refresh.actions.filter(a => a.action !== 'unchanged').map(a => [a.key, a.action, a.reason]),
+    [['dashboard:foundation', 'update', 'Content matches the definition; its ownership record is refreshed.']]);
+  await applyPlan(m.api, definition, options, refresh);
+  assert.ok((await plan(m.api, definition)).actions.every(a => a.action === 'unchanged'));
+  // A customer who moves a card keeps the move, with or without a current record.
+  const moved = m.dashboards.get(dashboard.id);
+  moved.dashcards[0].row += 1;
+  assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
+  moved.description = stale(moved.description);
+  assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
 });
 
 test('unavailable optional sources leave out only their cards and empty tabs', async () => {
