@@ -1,5 +1,5 @@
 import {digest, definitionSource, stamp, cardContent} from './ownership.mjs';
-import {snapshot, makePlan, contentOf, collectionDefinition} from './snapshot.mjs';
+import {snapshot, makePlan, contentOf, collectionDefinition, mappings} from './snapshot.mjs';
 
 async function getCard(api, id) {
   const card = await api('GET', `/api/card/${id}?legacy-mbql=true`);
@@ -23,17 +23,6 @@ async function curate(api, id, names) {
   if (remove.length) await api('POST', path + '/remove', {dimension_ids: remove});
   const time = dimensions.added.find(d => d.name === names[0]);
   await api('POST', path + '/set-default', {dimension_id: time.id});
-}
-
-function mappings(card, id, parameters) {
-  return parameters.flatMap(p => {
-    const questionParameter = card.parameters?.find(q => q.id === p.id);
-    const tag = card.dataset_query.native?.['template-tags']?.[p.id];
-    // A multi-tab dashboard can have filters this question does not consume.
-    if (!questionParameter && !tag) return [];
-    const target = questionParameter?.target || [tag?.type === 'dimension' ? 'dimension' : 'variable', ['template-tag', p.id]];
-    return [{parameter_id: p.id, card_id: id, target}];
-  });
 }
 
 async function layoutDashboard(api, existing, node, ids, cards, collectionId, description) {

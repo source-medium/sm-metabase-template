@@ -1,4 +1,4 @@
-import {digest, definitionSource, marker, prose, cardContent, dashboardContent, actionFor, scopeFor, withoutFieldTypes} from './ownership.mjs';
+import {digest, definitionSource, marker, prose, cardContent, dashboardContent, recordedDashboardContents, placedContent, actionFor, scopeFor, withoutFieldTypes} from './ownership.mjs';
 
 const list = value => Array.isArray(value) ? value : value.data;
 const dimensionSummary = dimensions => (dimensions ?? []).map(d => ({name: d.name, default: !!d.default}))
@@ -80,6 +80,35 @@ export const contentOf = object => object._kind === 'dashboard' ? dashboardConte
   object._kind === 'collection' ? {name: object.name, description: object.description?.split('\nSM_METABASE_V1 ')[0], parent_id: object.parent_id} :
   object.type === 'metric' ? metricContent(object) : cardContent(object);
 
+// How a dashboard card maps the dashboard's filters: to each template tag the card's
+// question consumes, as a field filter or a value.
+export function mappings(card, id, parameters) {
+  return parameters.flatMap(p => {
+    const questionParameter = card.parameters?.find(q => q.id === p.id);
+    const tag = card.dataset_query.native?.['template-tags']?.[p.id];
+    // A multi-tab dashboard can have filters this question does not consume.
+    if (!questionParameter && !tag) return [];
+    const target = questionParameter?.target || [tag?.type === 'dimension' ? 'dimension' : 'variable', ['template-tag', p.id]];
+    return [{parameter_id: p.id, card_id: id, target}];
+  });
+}
+
+// A dashboard whose content is exactly what its definition writes holds no customer edit,
+// whatever its ownership record says (a record taken from a read Metabase later reordered,
+// or an apply stopped part way). Every card must already be installed for that to hold.
+function matchesDefinition(existing, target, state) {
+  const cards = new Map([...state.owned].filter(([, v]) => v._kind === 'card'));
+  const {layout, cards: placements} = target;
+  if (placements.some(c => !cards.has(c.key) || cards.get(c.key).id !== c.card_id)) return false;
+  const defined = {name: layout.name, collection_id: state.collectionId ?? null, description: layout.description,
+    parameters: layout.parameters, tabs: layout.tabs.map((name, position) => ({name, position})),
+    dashcards: placements.map(c => ({card_id: c.card_id, row: c.row, col: c.col, size_x: c.size_x, size_y: c.size_y,
+      visualization_settings: c.visualization_settings ?? {}, tab: c.tab,
+      parameter_mappings: mappings(cards.get(c.key), c.card_id, layout.parameters)}))};
+  return digest(withoutFieldTypes(placedContent(existing))) === digest(withoutFieldTypes(placedContent({...defined,
+    tabs: defined.tabs.map(t => ({...t, id: t.position})), dashcards: defined.dashcards.map(({tab, ...c}) => ({...c, dashboard_tab_id: tab}))})));
+}
+
 export const collectionDefinition = options => ({key: 'collection:foundation', kind: 'collection', dependencies: [], body: () => ({
   name: 'SourceMedium foundation', parent_id: options.collection,
   description: 'Customer-owned SourceMedium dashboards, models and catalog-derived metrics. Refresh definitions with the SourceMedium adapter; add custom content separately.'})});
@@ -92,7 +121,12 @@ export function makePlan(definition, state, options) {
     const target = node.body(ids);
     const source = definitionSource(node, target);
     const existing = state.owned.get(node.key);
-    let result = actionFor(existing, source, contentOf);
+    let result = actionFor(existing, source, contentOf,
+      object => object._kind === 'dashboard' ? recordedDashboardContents(object) : []);
+    if (result.action === 'conflict' && node.kind === 'dashboard' && !existing.archived && marker(existing.description) &&
+        !marker(existing.description).pending && matchesDefinition(existing, target, state)) {
+      result = {action: 'update', reason: 'Content matches the definition; its ownership record is refreshed.'};
+    }
     if (existing && !existing.archived && marker(existing.description)?.pending) {
       const current = existing._kind === 'card' ? cardContent(existing) : ['collection', 'snippet'].includes(existing._kind) ? contentOf(existing) :
         {name: existing.name, collection_id: existing.collection_id ?? null,

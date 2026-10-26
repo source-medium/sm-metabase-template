@@ -100,6 +100,11 @@ export function fakeMetabase() {
   const snippets = new Map();
   const calls = [];
   let fail;
+  // Like a Metabase on a Postgres application database, which returns a dashboard's cards
+  // in storage order: when set, each read returns them, and their filter mappings, in the
+  // opposite order to the previous read.
+  let reorder = false;
+  let reads = 0;
   async function api(method, path, body) {
     calls.push({method, path, body: structuredClone(body)});
     if (fail?.(method, path, body)) throw new Error('Simulated transport failure.');
@@ -118,7 +123,9 @@ export function fakeMetabase() {
     const store = {collection: collections, card: cards, dashboard: dashboards, 'native-query-snippet': snippets}[kind];
     if (!store) throw new Error(`Unhandled fake API: ${method} ${path}`);
     if (method === 'GET') {
-      const read = o => kind === 'card' ? annotate(structuredClone(o)) : structuredClone(o);
+      const shuffle = d => (reorder && reads++ % 2 === 0) ? {...d, dashcards: [...(d.dashcards || [])].reverse()
+        .map(c => ({...c, parameter_mappings: [...(c.parameter_mappings || [])].reverse()}))} : d;
+      const read = o => kind === 'card' ? annotate(structuredClone(o)) : kind === 'dashboard' ? shuffle(structuredClone(o)) : structuredClone(o);
       if (!id) return [...store.values()].filter(o => ['card', 'dashboard'].includes(kind) ? Boolean(o.archived) === (url.searchParams.get('f') === 'archived') :
         Boolean(o.archived) === (url.searchParams.get('archived') === 'true')).map(read);
       if (!store.has(id)) throw new Error('Unknown test object.');
@@ -143,5 +150,5 @@ export function fakeMetabase() {
     store.set(actual, object);
     return structuredClone(object);
   }
-  return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}};
+  return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;}};
 }
