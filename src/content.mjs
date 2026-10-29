@@ -63,15 +63,15 @@ function templateTags(recipe, sql, options, table) {
   const tags = {};
   for (const filter of filtersIn(sql, options)) {
     const common = {id: filter.id, name: filter.id, 'display-name': filter.name, required: !!filter.required};
+    const name = filter.column === 'date' ? recipe.date : filter.column;
+    const column = name && table.fields.find(f => f.name === name && f.active !== false);
+    if (name && !column) throw new Error(`Missing ${recipe.table} filter column ${name}.`);
     if (filter.variable) {
       // A variable takes one value; its dashboard filter keeps Metabase's list form.
       const value = Array.isArray(filter.default) ? filter.default[0] : filter.default;
       tags[filter.id] = {...common, type: filter.variable, ...(value === undefined ? {} : {default: value})};
       continue;
     }
-    const name = filter.column === 'date' ? recipe.date : filter.column;
-    const column = table.fields.find(f => f.name === name && f.active !== false);
-    if (!column) throw new Error(`Missing ${recipe.table} filter column ${name}.`);
     tags[filter.id] = {...common, type: 'dimension', dimension: field(column), 'widget-type': filter.type,
       ...(filter.default === undefined ? {} : {default: filter.default})};
   }
@@ -79,6 +79,12 @@ function templateTags(recipe, sql, options, table) {
 }
 
 export function nativeCard(recipe, sql, options, table, metrics = []) {
+  if (options.store) {
+    // Keep the store predicate mandatory even when the question is opened outside a
+    // dashboard. Source tables are unaliased, including metadata questions.
+    const dataset = recipe.metadata ? 'METADATA' : 'DATASET';
+    sql = sql.replaceAll('[[AND {{store}}]]', `AND \`${dataset}.${recipe.table}\`.sm_store_id = {{store}}`);
+  }
   const tags = templateTags(recipe, sql, options, table);
   const column_settings = Object.fromEntries([...new Set([...Object.keys(columnTitles), ...outputAliases(sql)])].flatMap(name => {
     const title = titleOf(name);

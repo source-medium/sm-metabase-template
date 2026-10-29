@@ -125,7 +125,10 @@ cd sm-metabase-template
      --plan foundation-plan.json
    ```
 
-   Add `--store STORE_ID` to set a default store. Without it the dashboards
+   Add `--store STORE_ID` to require one store, with that ID as the default.
+   Store becomes a required, single-value text filter in dashboards and standalone
+   questions; choose another store by entering its ID or clicking an All stores row.
+   The All stores view continues to group each store separately. Without `--store` the dashboards
    total every store, so the plan refuses a warehouse whose stores report in
    more than one currency until you pass one. When `dim_stores.store_currency_code`
    is not synced, the plan cannot check and lists the check under `unsupported`

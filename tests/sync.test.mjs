@@ -343,7 +343,7 @@ test('the managed subcollection is refused as a target before any write', async 
   assert.equal(writes(m.calls.slice(start)).length, 0);
 });
 
-test('a --store install still shows every store on All stores, and other views default to that store', async () => {
+test('a --store install requires one store in dashboards and questions while All stores stays grouped', async () => {
   assert.equal(options.store, 'store-a');
   const m = fakeMetabase();
   const definition = full();
@@ -354,11 +354,64 @@ test('a --store install still shows every store on All stores, and other views d
   assert.ok(!m.dashboards.get(installed.ids['dashboard:stores']).parameters.some(p => p.id === 'store'));
   const foundation = m.dashboards.get(installed.ids['dashboard:foundation']);
   assert.deepEqual(foundation.parameters.find(p => p.id === 'store').default, ['store-a']);
+  for (const dashboard of m.dashboards.values()) {
+    const store = dashboard.parameters.find(p => p.id === 'store');
+    if (!store) continue;
+    assert.equal(store.required, true);
+    assert.equal(store.isMultiSelect, false);
+  }
+  for (const card of m.cards.values()) {
+    const native = card.dataset_query.native;
+    const store = native?.['template-tags'].store;
+    if (!store) continue;
+    assert.equal(store.required, true);
+    assert.equal(store.type, 'text');
+    assert.equal(store.default, 'store-a');
+    assert.doesNotMatch(native.query, /\[\[[^\]]*\{\{store\}\}/);
+    // A scalar equality cannot turn into a multi-store IN predicate when run standalone.
+    const predicates = [...native.query.matchAll(/`[^`]+`\.sm_store_id = \{\{store\}\}/g)];
+    assert.equal(predicates.length, [...native.query.matchAll(/\{\{store\}\}/g)].length);
+    assert.ok(predicates.length > 0);
+  }
   const placement = foundation.dashcards.find(c => c.card_id === stores.id);
   assert.ok(!placement.parameter_mappings.some(p => p.parameter_id === 'store'));
   const kpis = foundation.dashcards.find(c => c.card_id === installed.ids['question:kpis']);
-  assert.ok(kpis.parameter_mappings.some(p => p.parameter_id === 'store'));
+  assert.deepEqual(kpis.parameter_mappings.find(p => p.parameter_id === 'store').target,
+    ['variable', ['template-tag', 'store']]);
 });
+
+test('a currency-checked install without --store retains optional multi-store field filters', () => {
+  const unscoped = {...options, store: undefined};
+  const definition = definitions(compileCatalog(rows, tables, options.dataset, documented(tables)), tables, sql, unscoped);
+  const card = definition.nodes.find(n => n.key === 'question:kpis').body(new Map());
+  assert.equal(card.dataset_query.native['template-tags'].store.type, 'dimension');
+  assert.equal(card.dataset_query.native['template-tags'].store.required, false);
+  assert.ok(card.dataset_query.native.query.includes('[[AND {{store}}]]'));
+  const store = definition.nodes.find(n => n.key === 'dashboard:foundation').layout.parameters.find(p => p.id === 'store');
+  assert.equal(store.required, undefined);
+  assert.equal(store.default, undefined);
+});
+
+for (const [source, question, name] of [
+  ['dim_data_dictionary', 'data_health', 'Source freshness'],
+  ['obt_order_lines', 'product_totals', 'Product net revenue'],
+]) {
+  for (const state of ['missing', 'inactive']) {
+    for (const scoped of [false, true]) {
+      test(`${scoped ? 'scoped' : 'unscoped'} questions omit ${source} when its Store column is ${state}`, () => {
+        const synced = foundationTables.map(table => table.name !== source ? table : {...table,
+          fields: state === 'missing' ? table.fields.filter(field => field.name !== 'sm_store_id') :
+            table.fields.map(field => field.name === 'sm_store_id' ? {...field, active: false} : field)});
+        const target = {...options, store: scoped ? options.store : undefined};
+        const definition = definitions(compileCatalog([...rows, ...paidRows], synced, target.dataset, documented(synced)),
+          synced, sql, target);
+        assert.ok(!definition.nodes.some(node => node.key === `question:${question}`));
+        assert.ok(definition.unavailable.some(item => item.name === name && /filter columns/.test(item.reason)));
+        assert.ok(definition.nodes.some(node => node.key === 'question:kpis'), 'unrelated sources remain available');
+      });
+    }
+  }
+}
 
 test('a question naming an unknown filter is refused instead of running unfiltered', async () => {
   const {filtersIn} = await import('../src/filters.mjs');
