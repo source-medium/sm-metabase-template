@@ -1,10 +1,13 @@
--- Comparison periods, following the App Starter's rules. Position 1 is the selection,
--- 2 is Compare with and 3 is Second comparison. Previous period follows what the
+-- Comparison periods. Position 1 is the selection, 2 is Compare with and 3 is Second
+-- comparison. The question defines a CTE named selected, with start_date and end_date,
+-- before this; the foundation's questions take the first and last dates that have rows
+-- in the Date filter, not the dates it requested. Previous period follows what the
 -- selection is: one day compares with the same weekday a week earlier; a calendar month,
--- quarter or year (complete, or to date through the last two days) with the one before
--- it; any other range with the same number of days just before it. A second comparison
--- on the same dates is left out. The question defines a CTE named selected, with
--- start_date and end_date, before this.
+-- quarter or year, complete or to date (ending within the last two days of
+-- CURRENT_DATE), with the one before it; any other range, a calendar week included,
+-- with the same number of days just before it. A second comparison on the same dates
+-- is left out. The App Starter's rules are similar but read the requested dates, end a
+-- period to date exactly yesterday and treat calendar weeks as periods.
 selection_shape AS (
   SELECT
     start_date,

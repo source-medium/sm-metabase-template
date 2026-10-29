@@ -28,8 +28,8 @@ Edit `foundation/sql/<key>.sql`. Keep the rules the checks enforce:
 - SQL several questions share lives in `foundation/sql/include/`; a line
   `-- @include periods` stands for `include/periods.sql`. The `periods`
   include turns a `selected` CTE (`start_date`, `end_date`) into the comparison
-  periods, following the App Starter's rules; questions with a comparison
-  join their source to it.
+  periods, modeled on the App Starter's rules (its header names the
+  differences); questions with a comparison join their source to it.
 - On `rpt_executive_summary_daily`, wrap order measures (revenue, discounts,
   refunds, order counts, new and repeat orders) in the valid-channel test, as
   the existing files do. Spend and sessions count every row.
