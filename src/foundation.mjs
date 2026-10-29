@@ -59,7 +59,7 @@ function combine(layouts, options) {
 }
 
 // A question's own table and the tables it joins must be synced with the columns it reads.
-function missingSource(question, tables, dataset) {
+export function missingSource(question, tables, dataset) {
   const synced = name => tables.find(t => t.schema === dataset && t.name === name && t.active !== false);
   if (!synced(question.table)) return 'Source table is not synced in the selected dataset.';
   for (const [name, columns] of Object.entries(question.requires || {})) {

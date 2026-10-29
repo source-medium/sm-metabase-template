@@ -3,7 +3,7 @@ import {readFile, writeFile, realpath} from 'node:fs/promises';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
-import {client, identifier, metabaseUrl, readWarehouse} from '../src/http.mjs';
+import {client, identifier, metabaseUrl, readWarehouse, requireOneCurrency} from '../src/http.mjs';
 import {compileCatalog} from '../src/catalog.mjs';
 import {definitions, foundationSql} from '../src/foundation.mjs';
 import {formattingFor} from '../src/formats.mjs';
@@ -51,9 +51,11 @@ export async function main(argv = process.argv.slice(2)) {
   const api = client(options.url, await tokenFor(options), {session: options.session});
   const sql = foundationSql();
   const warehouse = await readWarehouse(api, options.database, options.metadataDataset);
+  const unchecked = await requireOneCurrency(api, warehouse.tables, options);
   const catalog = compileCatalog(warehouse.rows, warehouse.tables, options.dataset, warehouse.dictionary);
   const formatting = formattingFor(catalog);
-  const definition = {...definitions(catalog, warehouse.tables, sql, options),
+  const built = definitions(catalog, warehouse.tables, sql, options);
+  const definition = {...built, unavailable: [...built.unavailable, ...unchecked],
     unsupported: catalog.unsupported, formatting};
   if (!options.apply) {
     const plan = makePlan(definition, await snapshot(api, options, definition.nodes), options);
@@ -76,7 +78,8 @@ export async function main(argv = process.argv.slice(2)) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.argv[1])).href) {
   main().catch(error => {
-    // Our errors exclude response bodies, headers and credential contents.
+    // Our errors exclude headers, credential contents and response bodies, except the
+    // warehouse error Metabase reports for a failed query.
     console.error(error instanceof Error && error.constructor === Error ? error.message : 'The adapter could not complete. No credential details were logged.');
     process.exitCode = 1;
   });

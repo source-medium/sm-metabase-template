@@ -1,3 +1,5 @@
+import {missingSource} from './foundation.mjs';
+
 const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 
 export function metabaseUrl(value) {
@@ -46,13 +48,33 @@ export function identifier(value) {
   return value;
 }
 
+// A failed query names the warehouse's own error, as Metabase reports it.
 async function metadataRows(api, database, query, label) {
   const result = await api('POST', '/api/dataset', {database, type: 'native', native: {query}});
-  if (result.status !== 'completed' || result.data?.rows_truncated) {
-    throw new Error(`The ${label} query failed or was truncated. No content was changed.`);
+  if (result.status !== 'completed') {
+    throw new Error(`The ${label} query failed${typeof result.error === 'string' ? `: ${result.error}` : ''}. No content was changed.`);
   }
+  if (result.data?.rows_truncated) throw new Error(`The ${label} query was truncated. No content was changed.`);
   const names = result.data.cols.map(c => c.name);
   return result.data.rows.map(row => Object.fromEntries(names.map((n, i) => [n, row[i]])));
+}
+
+// Without --store, the Store filter is empty and the dashboards total money across every store,
+// and money is never summed across currencies (AGENTS.md rule 4). A warehouse whose stores
+// report in more than one currency therefore installs only with --store. Like a question, the
+// check needs its source synced: otherwise it is skipped and returned for the plan's unsupported list.
+export async function requireOneCurrency(api, tables, {database, dataset, store}) {
+  if (store) return [];
+  const missing = missingSource({table: 'dim_stores', requires: {dim_stores: ['store_currency_code']}}, tables, dataset);
+  if (missing) return [{name: 'Store currency check', reason: missing}];
+  const rows = await metadataRows(api, database, `SELECT DISTINCT store_currency_code AS currency
+    FROM \`${identifier(dataset)}.dim_stores\` ORDER BY currency`, 'store currency');
+  if (rows.length > 1) {
+    throw new Error(`Stores in ${dataset} report in more than one currency (${rows.map(row => row.currency ?? 'unset').join(', ')}). ` +
+      'Without --store, the dashboards total money across every store. ' +
+      'Pass --store STORE_ID to install for one store. No content was changed.');
+  }
+  return [];
 }
 
 // value_format is read through the row's JSON so a warehouse whose metadata predates

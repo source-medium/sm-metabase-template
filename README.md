@@ -36,13 +36,16 @@ delivers its tables, so a missing source never hides the others.
 | Orders | The 500 most recently processed orders, all or only valid, searchable by name, number or ID; an order opens its details and attribution evidence | `obt_orders`, `fct_order_attribution_signals` |
 | Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
 
-Comparisons follow the [App Starter](https://github.com/source-medium/sm-app-template):
+Comparisons are modeled on the [App Starter](https://github.com/source-medium/sm-app-template):
 **Compare with** and **Second comparison** choose the previous period, the same
 period last year or 52 weeks earlier. The previous period follows what the dates
 are: a single day compares with the same weekday a week earlier, a calendar
 month, quarter or year (complete, or to date) with the one before, and any other
-range with the same number of days just before it. A card whose source your
-warehouse does not deliver is left out without hiding the rest of its tab.
+range with the same number of days just before it. Unlike the App Starter, the
+dates are the first and last days with data in the selection, a period to date
+ends within the last two days rather than exactly yesterday, and a calendar
+week compares as any other range. A card whose source your warehouse does not
+deliver is left out without hiding the rest of its tab.
 
 Beside the dashboards, the installer adds:
 
@@ -59,7 +62,9 @@ counts, new and repeat orders) count SourceMedium's valid sales channels:
 `online_dtc`, `amazon`, `retail`, `wholesale` and `tiktok_shop`. Ad spend and
 sessions count every row. These are the same definitions the
 [App Starter](https://github.com/source-medium/sm-app-template) and SourceMedium's
-AI tools use. [What the numbers mean](https://sourcemedium.com/docs/onboarding/analytics-tools/connect-metabase#what-the-numbers-mean)
+AI tools use. The default scope differs: the Channel filter here starts on
+`online_dtc`, while the App Starter starts on every sales channel, so clear
+Channel to compare totals with it. [What the numbers mean](https://sourcemedium.com/docs/onboarding/analytics-tools/connect-metabase#what-the-numbers-mean)
 explains each one.
 
 ## Before you start
@@ -120,12 +125,17 @@ cd sm-metabase-template
      --plan foundation-plan.json
    ```
 
-   Add `--store STORE_ID` to set a default store. Retention's cutoff defaults to
+   Add `--store STORE_ID` to set a default store. Without it the dashboards
+   total every store, so the plan refuses a warehouse whose stores report in
+   more than one currency until you pass one. When `dim_stores.store_currency_code`
+   is not synced, the plan cannot check and lists the check under `unsupported`
+   instead. Retention's cutoff defaults to
    the previous completed UTC month; `--as-of-month YYYY-MM-01` picks another.
 4. Review `foundation-plan.json`: `changes` (what it creates or updates),
    `unsupported` (catalog metrics it cannot express exactly, each with a
    reason), `retained`, `formatting` and any conflicts. Planning reads
-   metadata and may run one small BigQuery catalog query; it changes nothing.
+   metadata and runs small BigQuery queries on the metric catalog and, without
+   `--store`, on your stores' currencies; it changes nothing.
 5. Apply the reviewed plan with the same options:
 
    ```bash

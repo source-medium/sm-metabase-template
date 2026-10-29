@@ -40,6 +40,9 @@ No dependencies to install. Node.js 22 or later.
 3. Write each source table as `` `DATASET.table` ``, unaliased: Metabase field
    filters refer to it by that name. Join other tables under an alias.
 4. Never sum money across stores: stores can report in different currencies.
+   The installer refuses a warehouse whose stores use more than one currency
+   unless `--store` is given. Without a synced `dim_stores.store_currency_code`
+   it cannot check, and the plan lists the check under `unsupported`.
 5. Keys are identities. Rename `name`, never `key`.
 6. A Metabase filter is navigation, not a permission boundary.
 
@@ -100,7 +103,9 @@ node bin/sourcemedium-metabase.mjs \
   --plan foundation-plan.json
 ```
 
-Optional: `--store STORE_ID`, `--as-of-month YYYY-MM-01` (a completed month; the
+Optional: `--store STORE_ID` (required when the stores report in more than one
+currency: without it the dashboards total every store, and the plan refuses),
+`--as-of-month YYYY-MM-01` (a completed month; the
 default is the previous completed UTC month). Keep every option identical when
 replacing `--plan` with `--apply foundation-plan.json`. The destination is the
 **parent** of the managed SourceMedium foundation collection; the installer
