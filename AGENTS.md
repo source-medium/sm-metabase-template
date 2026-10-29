@@ -41,7 +41,9 @@ No dependencies to install. Node.js 22 or later.
    filters refer to it by that name. Join other tables under an alias.
 4. Never sum money across stores: stores can report in different currencies.
    The installer refuses a warehouse whose stores use more than one currency
-   unless `--store` is given. Without a synced `dim_stores.store_currency_code`
+   unless `--store` is given, which makes Store a required single-value filter
+   in dashboards and standalone questions. All stores remains grouped by store.
+   Without a synced `dim_stores.store_currency_code`
    it cannot check, and the plan lists the check under `unsupported`.
 5. Keys are identities. Rename `name`, never `key`.
 6. A Metabase filter is navigation, not a permission boundary.
@@ -133,7 +135,8 @@ access can also compile every question with `node scripts/verify-sql.mjs`
   detailed-query costs before opening the Products, Geography, Orders and
   Retention tabs on a large warehouse.
 - Open native questions individually and on their dashboards: required Date,
-  optional Store, cleared Channel and each tab's filter mappings. Sales Channel
+  required single-value Store with `--store` (optional otherwise), cleared Channel
+  and each tab's filter mappings. Sales Channel
   does not filter paid marketing or creatives; Ad platform does. Retention uses
   As-of month, not Date. Try another Compare with, a Period of Week, and the
   clicks: a campaign name, a country then a region, an order.
