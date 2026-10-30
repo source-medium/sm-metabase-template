@@ -11,7 +11,7 @@ the copy and the Metabase content are yours.
 
 **[Install with an agent](#install-with-a-coding-agent)** ·
 [Install by hand](#install-by-hand) ·
-[Open the demo](https://metabase-demo.sourcemedium.com/)
+[Open the demo](https://metabase-demo.sourcemedium.app/)
 
 _The demo runs on SourceMedium's demo warehouse with synthetic data. No sign-in
 required. It is a preview, never your own data._
