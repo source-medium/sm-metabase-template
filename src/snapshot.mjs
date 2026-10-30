@@ -1,8 +1,30 @@
-import {digest, definitionSource, marker, prose, cardContent, dashboardContent, recordedDashboardContents, placedContent, actionFor, scopeFor, withoutFieldTypes} from './ownership.mjs';
+import {digest, definitionSource, marker, prose, cardContent, dashboardContent, recordedDashboardContents, placedContent, actionFor, scopeFor, withoutFieldTypes, ownershipMap} from './ownership.mjs';
 
 const list = value => Array.isArray(value) ? value : value.data;
 const dimensionSummary = dimensions => (dimensions ?? []).map(d => ({name: d.name, default: !!d.default}))
   .sort((a, b) => a.name.localeCompare(b.name));
+const paths = {collection: 'collection', card: 'card', dashboard: 'dashboard', snippet: 'native-query-snippet'};
+
+// One object as the plan compares it: a card in legacy MBQL, with a metric's dimensions.
+export async function readObject(api, kind, id) {
+  if (kind !== 'card') return {...await api('GET', `/api/${paths[kind]}/${id}`), _kind: kind};
+  const card = await api('GET', `/api/card/${id}?legacy-mbql=true`);
+  if (card.type === 'metric') card._dimensions = (await api('GET', `/api/metric/${id}/dimension`)).added;
+  return {...card, _kind: 'card'};
+}
+
+// An unmarked object with a managed name in the managed collection has lost its ownership
+// line: report it rather than create a second managed copy beside it.
+function reportUnmarked(definitions, state, home, cards, dashboards) {
+  const unowned = object => !object.archived && marker(object.description)?.scope !== state.scope;
+  for (const node of definitions.filter(n => !state.owned.has(n.key) && !state.unmarked.has(n.key) && ['card', 'dashboard'].includes(n.kind))) {
+    const name = node.kind === 'card' ? node.body(new Map()).name : node.layout.name;
+    const candidates = node.kind === 'card' ? cards : dashboards;
+    if (candidates.some(o => unowned(o) && o.collection_id === home.id && o.name === name)) {
+      state.unmarked.set(node.key, 'An unmarked object with this managed name is in the managed collection; restore its ownership line or move it out.');
+    }
+  }
+}
 
 export async function snapshot(api, options, definitions = []) {
   const version = await api('GET', '/api/session/properties');
@@ -22,6 +44,12 @@ export async function snapshot(api, options, definitions = []) {
     api('GET', '/api/dashboard'), api('GET', '/api/dashboard?f=archived'),
     api('GET', '/api/native-query-snippet'), api('GET', '/api/native-query-snippet?archived=true'),
   ]);
+  // null: a hosted install before its first apply recorded a map.
+  if (options.ownership !== undefined) {
+    return recordedSnapshot(api, options, definitions, scope, {collections: [...list(collections), ...list(archivedCollections)],
+      cards: [...new Map([...list(cards), ...list(archivedCards)].map(c => [c.id, c])).values()],
+      dashboards: [...list(dashboards), ...list(archivedDashboards)], snippets: [...list(snippets), ...list(archivedSnippets)]});
+  }
   const owned = new Map();
   const duplicate = new Set();
   const remember = (object, kind, key) => {
@@ -34,11 +62,7 @@ export async function snapshot(api, options, definitions = []) {
   for (const c of [...list(collections), ...list(archivedCollections)].filter(c => marker(c.description)?.scope === scope)) remember(await api('GET', `/api/collection/${c.id}`), 'collection');
   const managedCollection = owned.get('collection:foundation');
   const allCards = [...new Map([...list(cards), ...list(archivedCards)].map(c => [c.id, c])).values()];
-  for (const c of allCards.filter(c => marker(c.description)?.scope === scope)) {
-    const card = await api('GET', `/api/card/${c.id}?legacy-mbql=true`);
-    if (card.type === 'metric') card._dimensions = (await api('GET', `/api/metric/${c.id}/dimension`)).added;
-    remember(card, 'card');
-  }
+  for (const c of allCards.filter(c => marker(c.description)?.scope === scope)) remember(await readObject(api, 'card', c.id), 'card');
   const allDashboards = [...list(dashboards), ...list(archivedDashboards)];
   for (const d of allDashboards.filter(d => marker(d.description)?.scope === scope)) remember(await api('GET', `/api/dashboard/${d.id}`), 'dashboard');
   const names = new Map(definitions.filter(n => n.kind === 'snippet').map(n => [n.body(new Map()).name, n.key]));
@@ -52,13 +76,7 @@ export async function snapshot(api, options, definitions = []) {
   const unmarked = new Map();
   const unowned = object => !object.archived && marker(object.description)?.scope !== scope;
   if (managedCollection) {
-    for (const node of definitions.filter(n => !owned.has(n.key) && ['card', 'dashboard'].includes(n.kind))) {
-      const name = node.kind === 'card' ? node.body(new Map()).name : node.layout.name;
-      const candidates = node.kind === 'card' ? allCards : allDashboards;
-      if (candidates.some(o => unowned(o) && o.collection_id === managedCollection.id && o.name === name)) {
-        unmarked.set(node.key, 'An unmarked object with this managed name is in the managed collection; restore its ownership line or move it out.');
-      }
-    }
+    reportUnmarked(definitions, {scope, owned, unmarked}, managedCollection, allCards, allDashboards);
   } else {
     const homes = new Set([...owned.values()].filter(o => o._kind !== 'snippet' && !o.archived).map(o => o.collection_id));
     for (const listed of list(collections).filter(c => homes.has(c.id) && unowned(c))) {
@@ -69,6 +87,79 @@ export async function snapshot(api, options, definitions = []) {
     }
   }
   return {scope, owned, duplicate, unmarked, collectionId: managedCollection?.id};
+}
+
+// Which unrecorded object an interrupted apply created, from the objects that claim a managed
+// key: collections in the target parent, cards and dashboards in the managed collection, and
+// snippets with the managed name or line. Returns the object to adopt, null when there is none
+// (the plan creates it), or the reason it cannot be adopted (the plan reports a conflict).
+// Several claims are never resolved by choosing one. Collections record no creator; only the
+// installer can place one in the target parent before setup opens. An archived claim is
+// adopted, so the plan reports it preserved rather than creating a second object.
+function recoverable(candidates, {key, scope, creator}) {
+  if (!candidates.length) return null;
+  if (candidates.length > 1) return 'Several objects claim this managed identity; preserved for review.';
+  const [object] = candidates;
+  const line = marker(object.description);
+  if (line?.key !== key || line.scope !== scope) return 'An unrecorded object has this managed name; preserved. Rename or remove it.';
+  if (object._kind !== 'collection' && object.creator_id !== creator) return 'Another Metabase user created this managed object; preserved for review.';
+  return object;
+}
+
+// A hosted install records the ID of every object it manages (the ownership map) and reads
+// those IDs, wherever the objects have moved. Metabase copies a question's description with
+// the question, so a customer's copy carries the same ownership line. Discovering lines, as a
+// customer-hosted install does, would report the copy and its original as duplicates and
+// block their dashboards. Objects an interrupted apply created before their IDs were recorded
+// are recovered (recoverable above) and recorded in the returned map, which the caller saves
+// before applying.
+async function recordedSnapshot(api, options, definitions, scope, all) {
+  const map = ownershipMap(options.ownership, scope);
+  const owned = new Map();
+  const unmarked = new Map();
+  for (const [key, {kind, id}] of Object.entries(map.objects)) {
+    let object;
+    try { object = await readObject(api, kind, id); } catch (error) {
+      if (error.status !== 404) throw error;
+      unmarked.set(key, `The recorded ${kind} ${id} no longer exists; restore it or record its replacement.`);
+      continue;
+    }
+    const line = marker(object.description);
+    if (line && (line.key !== key || line.scope !== scope)) unmarked.set(key, `The recorded ${kind} ${id} carries another ownership line; preserved.`);
+    owned.set(key, object);
+  }
+  const unrecorded = [collectionDefinition(options), ...definitions].filter(n => !map.objects[n.key]);
+  if (unrecorded[0]?.key === 'collection:foundation' && Object.keys(map.objects).length) {
+    throw new Error('The ownership map records content but not its collection. No content was changed.');
+  }
+  const recovered = {};
+  if (unrecorded.length) {
+    const {id: creator} = await api('GET', '/api/user/current');
+    const claims = (objects, key) => objects.filter(o => marker(o.description)?.scope === scope && marker(o.description).key === key);
+    for (const node of unrecorded) {
+      const home = owned.get('collection:foundation');
+      let candidates = [];
+      if (node.kind === 'collection') {
+        candidates = (await Promise.all(claims(all.collections, node.key).map(c => readObject(api, 'collection', c.id))))
+          .filter(c => c.parent_id === options.collection);
+      } else {
+        const name = node.kind === 'snippet' && node.body(new Map()).name;
+        const listed = node.kind === 'snippet' ? all.snippets.filter(s => s.name === name || claims([s], node.key).length) :
+          home && !unmarked.has('collection:foundation') ? claims(node.kind === 'card' ? all.cards : all.dashboards, node.key).filter(o => o.collection_id === home.id) : [];
+        candidates = await Promise.all(listed.map(o => readObject(api, node.kind, o.id)));
+      }
+      const result = recoverable(candidates, {key: node.key, scope, creator});
+      if (typeof result === 'string') unmarked.set(node.key, result);
+      else if (result) {
+        owned.set(node.key, result);
+        recovered[node.key] = {kind: node.kind, id: result.id};
+      }
+    }
+    const home = owned.get('collection:foundation');
+    if (home) reportUnmarked(definitions, {scope, owned, unmarked}, home, all.cards, all.dashboards);
+  }
+  const ownership = Object.keys(recovered).length ? {...map, revision: map.revision + 1, objects: {...map.objects, ...recovered}} : map;
+  return {scope, owned, duplicate: new Set(), unmarked, collectionId: owned.get('collection:foundation')?.id, ownership, recovered: Object.keys(recovered)};
 }
 
 export function metricContent(card) {
@@ -154,6 +245,8 @@ export function makePlan(definition, state, options) {
   const review = {format: 1, target: {url: options.url, database: options.database, dataset: options.dataset,
     metadataDataset: options.metadataDataset, collection: options.collection, store: options.store || null, asOf: options.asOf},
     actions, unsupported: [...definition.unavailable, ...(definition.unsupported ?? [])], retained,
-    ...(definition.formatting ? {formatting: definition.formatting} : {})};
+    ...(definition.formatting ? {formatting: definition.formatting} : {}),
+    // A plan reviewed against one ownership map is stale once the map changes.
+    ...(state.ownership ? {ownership: {revision: state.ownership.revision}} : {})};
   return {...review, digest: digest(review)};
 }

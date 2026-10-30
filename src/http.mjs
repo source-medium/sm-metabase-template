@@ -27,7 +27,8 @@ export function client(url, token, {session = false, fetch: request = globalThis
     } catch {
       throw new Error(`Metabase ${method} ${path}: connection failed or timed out.`);
     }
-    if (!response.ok) throw new Error(`Metabase ${method} ${path}: HTTP ${response.status}.`);
+    // The status lets a caller tell a deleted object (404) from a failure.
+    if (!response.ok) throw Object.assign(new Error(`Metabase ${method} ${path}: HTTP ${response.status}.`), {status: response.status});
     const chunks = [];
     let size = 0;
     for await (const chunk of response.body ?? []) {

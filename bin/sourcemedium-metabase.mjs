@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {readFile, writeFile, realpath} from 'node:fs/promises';
+import {readFile, writeFile, realpath, rename} from 'node:fs/promises';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
@@ -17,6 +17,7 @@ export function argumentsFor(argv, now = new Date()) {
     'metadata-dataset': {type: 'string'}, 'collection-id': {type: 'string'},
     'api-key-file': {type: 'string'}, 'session-file': {type: 'string'},
     plan: {type: 'string'}, apply: {type: 'string'}, store: {type: 'string'}, 'as-of-month': {type: 'string'},
+    'ownership-map': {type: 'string'},
   }})); } catch { throw new Error('Unknown or missing command option. See README.md.'); }
   const database = Number(values['database-id']);
   const collection = Number(values['collection-id']);
@@ -31,8 +32,26 @@ export function argumentsFor(argv, now = new Date()) {
   if (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(asOf) || new Date(asOf) >= month) throw new Error('As-of month must be the first day of a completed month.');
   return {url: metabaseUrl(values.url), database, collection, dataset: identifier(values.dataset),
     metadataDataset: identifier(values['metadata-dataset']), store: values.store, asOf,
-    planFile: values.plan || values.apply, apply: !!values.apply,
+    planFile: values.plan || values.apply, apply: !!values.apply, ownershipFile: values['ownership-map'],
     tokenFile: values['api-key-file'] || values['session-file'], session: !!values['session-file']};
+}
+
+async function resolved(file, description) {
+  try { return await realpath(file); }
+  catch (error) { if (error.code !== 'ENOENT') throw new Error(`Could not resolve the ${description}.`); return resolve(file); }
+}
+
+// Hosted installs keep the ID of every managed object in an ownership map (src/ownership.mjs).
+// A missing file is a first install. It is replaced whole, so an interruption never leaves half a map.
+async function readOwnership(file) {
+  let text;
+  try { text = await readFile(file, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw new Error('Could not read the ownership map.'); }
+  try { return JSON.parse(text); } catch { throw new Error('The ownership map is invalid. No content was changed.'); }
+}
+async function saveOwnership(file, map) {
+  await writeFile(file + '.tmp', JSON.stringify(map, null, 2) + '\n', {mode: 0o600});
+  await rename(file + '.tmp', file);
 }
 
 async function tokenFor(options) {
@@ -44,10 +63,15 @@ async function tokenFor(options) {
 
 export async function main(argv = process.argv.slice(2)) {
   const options = argumentsFor(argv);
-  let planPath;
-  try { planPath = await realpath(options.planFile); }
-  catch (error) { if (error.code !== 'ENOENT') throw new Error('Could not resolve the plan file.'); planPath = resolve(options.planFile); }
-  if (planPath === await realpath(options.tokenFile)) throw new Error('Use separate files for the Metabase credential and the review plan.');
+  const planPath = await resolved(options.planFile, 'plan file');
+  const tokenPath = await realpath(options.tokenFile);
+  if (planPath === tokenPath) throw new Error('Use separate files for the Metabase credential and the review plan.');
+  if (options.ownershipFile) {
+    if ([planPath, tokenPath].includes(await resolved(options.ownershipFile, 'ownership map'))) {
+      throw new Error('Use a separate file for the ownership map.');
+    }
+    options.ownership = await readOwnership(options.ownershipFile);
+  }
   const api = client(options.url, await tokenFor(options), {session: options.session});
   const sql = foundationSql();
   const warehouse = await readWarehouse(api, options.database, options.metadataDataset);
@@ -58,21 +82,26 @@ export async function main(argv = process.argv.slice(2)) {
   const definition = {...built, unavailable: [...built.unavailable, ...unchecked],
     unsupported: catalog.unsupported, formatting};
   if (!options.apply) {
-    const plan = makePlan(definition, await snapshot(api, options, definition.nodes), options);
+    const state = await snapshot(api, options, definition.nodes);
+    const plan = makePlan(definition, state, options);
+    // Recovered IDs are saved before the plan, so apply reads the map this plan was made with.
+    if (state.recovered?.length) await saveOwnership(options.ownershipFile, state.ownership);
     await writeFile(options.planFile, JSON.stringify(plan, null, 2) + '\n', {mode: 0o600});
     const counts = Object.fromEntries(['create', 'update', 'resume', 'unchanged', 'conflict', 'blocked'].map(action => [action, plan.actions.filter(a => a.action === action).length]));
     console.log(JSON.stringify({actions: counts, models: {available: catalog.models.length, unavailable: catalog.unavailable.length},
       unsupported: plan.unsupported.length, retained: plan.retained.length,
       formatting: {unformattedColumns: formatting.unformatted.reduce((n, m) => n + m.columns.length, 0),
-        ...(formatting.note ? {note: formatting.note} : {})}, digest: plan.digest}));
+        ...(formatting.note ? {note: formatting.note} : {})},
+      ...(state.ownership ? {ownership: {revision: state.ownership.revision, recovered: state.recovered}} : {}), digest: plan.digest}));
     console.log('Plan saved. Review its changes, formatting, unavailable models/content, unsupported metrics and retained objects before applying. Metabase content was not changed.');
     return;
   }
   let reviewed;
   try { reviewed = JSON.parse(await readFile(options.planFile, 'utf8')); }
   catch { throw new Error('Could not read the reviewed plan.'); }
-  const result = await applyPlan(api, definition, options, reviewed, {notify: text => console.log(text)});
-  console.log(JSON.stringify(result));
+  const {ownership, ...result} = await applyPlan(api, definition, options, reviewed, {notify: text => console.log(text)});
+  if (ownership) await saveOwnership(options.ownershipFile, ownership);
+  console.log(JSON.stringify(ownership ? {...result, ownership: {revision: ownership.revision}} : result));
   if (result.conflicts.length) process.exitCode = 2;
 }
 
