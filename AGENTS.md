@@ -114,6 +114,17 @@ replacing `--plan` with `--apply foundation-plan.json`. The destination is the
 refuses the managed collection itself. HTTPS for a remote instance, HTTP only on
 loopback.
 
+SourceMedium's hosted installs add `--ownership-map FILE` to both steps. The
+map records the ID of each managed object, and the installer reads those IDs
+wherever the objects are, instead of discovering ownership lines. A customer's
+copy of a managed question carries the line too; with a map it is never adopted
+or reported as a duplicate. A missing file is a first install. Plan records
+objects an interrupted apply created (only unambiguous ones the installer's own
+Metabase user made in the managed collection, or snippets with a managed name)
+and saves the map before the plan; apply saves the IDs it installed. A plan is
+stale once the map's revision changes. Without the option, ownership lines are
+discovered as before.
+
 Review `changes`, `unsupported`, `retained`, `formatting` and conflicts. Apply
 only the approved plan; a stale plan must be regenerated. Numbers are formatted
 from the units the warehouse publishes (`value_format`); a `formatting.note`

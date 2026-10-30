@@ -105,6 +105,8 @@ export function fakeMetabase() {
   // opposite order to the previous read.
   let reorder = false;
   let reads = 0;
+  // The user the API key acts as: 1 is the installer's; a test acts as a customer to copy content.
+  let user = 1;
   async function api(method, path, body) {
     calls.push({method, path, body: structuredClone(body)});
     if (fail?.(method, path, body)) throw new Error('Simulated transport failure.');
@@ -113,6 +115,7 @@ export function fakeMetabase() {
     const kind = parts[1];
     const id = Number(parts[2]);
     if (path === '/api/session/properties') return {version: {tag: 'v0.64.1'}, 'setup-token': 'test-secret-not-for-plans'};
+    if (path === '/api/user/current') return {id: user};
     if (kind === 'metric') {
       const all = dimensions.get(id);
       if (method === 'GET') return {added: structuredClone(all), addable: []};
@@ -128,12 +131,14 @@ export function fakeMetabase() {
       const read = o => kind === 'card' ? annotate(structuredClone(o)) : kind === 'dashboard' ? shuffle(structuredClone(o)) : structuredClone(o);
       if (!id) return [...store.values()].filter(o => ['card', 'dashboard'].includes(kind) ? Boolean(o.archived) === (url.searchParams.get('f') === 'archived') :
         Boolean(o.archived) === (url.searchParams.get('archived') === 'true')).map(read);
-      if (!store.has(id)) throw new Error('Unknown test object.');
+      if (!store.has(id)) throw Object.assign(new Error('Unknown test object.'), {status: 404});
       return read(store.get(id));
     }
     const actual = id || ++sequence;
     // Like Metabase v0.64.1, keep the server's own entity ID and ignore a client's.
     const object = {...store.get(actual), ...structuredClone(body), id: actual, entity_id: store.get(actual)?.entity_id ?? `fake-entity-${actual}`};
+    // Collections have no creator.
+    if (kind !== 'collection') object.creator_id = store.get(actual)?.creator_id ?? user;
     if (kind === 'card') {
       object.archived ||= false;
       if (object.type === 'metric' && !dimensions.has(actual)) {
@@ -150,5 +155,6 @@ export function fakeMetabase() {
     store.set(actual, object);
     return structuredClone(object);
   }
-  return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;}};
+  return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;},
+    actAs: id => {user = id;}};
 }

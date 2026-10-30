@@ -20,6 +20,29 @@ export function marker(description = '') {
       /^[a-f0-9]{64}$/.test(value.source) && /^[a-f0-9]{64}$/.test(value.content) ? value : null;
   } catch { return null; }
 }
+// A hosted install's ownership map: the installation scope and the ID of each managed object
+// by key, with a revision that changes whenever an ID is recorded. Absent, it starts empty.
+const kinds = ['collection', 'card', 'dashboard', 'snippet'];
+export function ownershipMap(map, scope) {
+  if (map === null) return {format: 1, scope, revision: 0, objects: {}};
+  const objects = map?.objects && typeof map.objects === 'object' && !Array.isArray(map.objects) ? Object.values(map.objects) : null;
+  const ids = (objects ?? []).map(o => `${o?.kind}:${o?.id}`);
+  if (map?.format !== 1 || typeof map.scope !== 'string' || !Number.isSafeInteger(map.revision) || map.revision < 0 || !objects ||
+      objects.some(o => !kinds.includes(o?.kind) || !Number.isSafeInteger(o.id) || o.id <= 0) || new Set(ids).size !== ids.length) {
+    throw new Error('The ownership map is invalid. No content was changed.');
+  }
+  if (map.scope !== scope) throw new Error('The ownership map belongs to another URL, database, dataset or collection. No content was changed.');
+  return map;
+}
+
+// The map after an apply: each key's ID as installed. The revision changes only with an ID.
+export function recordIds(map, ids, nodes) {
+  const kindOf = new Map(nodes.map(n => [n.key, n.kind]));
+  const objects = {...map.objects};
+  for (const [key, id] of Object.entries(ids)) objects[key] = {kind: kindOf.get(key) ?? map.objects[key].kind, id};
+  return digest(objects) === digest(map.objects) ? map : {...map, revision: map.revision + 1, objects};
+}
+
 export function prose(description = '') {
   if (typeof description !== 'string') return '';
   const i = description.lastIndexOf(prefix);

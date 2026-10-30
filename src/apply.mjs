@@ -1,12 +1,5 @@
-import {digest, definitionSource, stamp, cardContent} from './ownership.mjs';
-import {snapshot, makePlan, contentOf, collectionDefinition, mappings} from './snapshot.mjs';
-
-async function getCard(api, id) {
-  const card = await api('GET', `/api/card/${id}?legacy-mbql=true`);
-  card._kind = 'card';
-  if (card.type === 'metric') card._dimensions = (await api('GET', `/api/metric/${id}/dimension`)).added;
-  return card;
-}
+import {digest, definitionSource, stamp, cardContent, recordIds} from './ownership.mjs';
+import {snapshot, makePlan, contentOf, collectionDefinition, mappings, readObject} from './snapshot.mjs';
 
 async function curate(api, id, names) {
   const path = `/api/metric/${id}/dimension`;
@@ -46,14 +39,14 @@ export async function applyPlan(api, definition, options, reviewed, {notify = ()
   }
   const ids = new Map([...state.owned].map(([key, value]) => [key, value.id]));
   const cards = new Map([...state.owned].filter(([, v]) => v._kind === 'card'));
-  for (const node of [collectionDefinition(options), ...definition.nodes]) {
+  const nodes = [collectionDefinition(options), ...definition.nodes];
+  for (const node of nodes) {
     const decision = fresh.actions.find(a => a.key === node.key);
     if (['conflict', 'blocked'].includes(decision.action)) { notify(`${decision.action}: ${node.key}`); continue; }
     if (decision.action === 'unchanged') continue;
     const existing = state.owned.get(node.key);
     if (existing) {
-      const live = node.kind === 'card' ? await getCard(api, existing.id) :
-        {...await api('GET', `/api/${node.kind === 'snippet' ? 'native-query-snippet' : node.kind}/${existing.id}`), _kind: node.kind};
+      const live = await readObject(api, node.kind, existing.id);
       if (live.archived || digest(contentOf(live)) !== decision.before) throw new Error(`Content changed during apply: ${node.key}. Stopped before overwriting it.`);
     }
     const body = node.body(ids);
@@ -67,9 +60,9 @@ export async function applyPlan(api, definition, options, reviewed, {notify = ()
       payload.description = stamp(body.description, pending);
       object = await api(existing ? 'PUT' : 'POST', `/api/card${existing ? '/' + existing.id : ''}`, payload);
       if (node.dimensions) await curate(api, object.id, node.dimensions);
-      object = await getCard(api, object.id);
+      object = await readObject(api, 'card', object.id);
       await api('PUT', `/api/card/${object.id}`, {description: stamp(body.description, {...pending, pending: false, content: digest(contentOf(object))})});
-      object = await getCard(api, object.id);
+      object = await readObject(api, 'card', object.id);
       cards.set(node.key, object);
     } else if (node.kind === 'snippet') {
       object = await api(existing ? 'PUT' : 'POST', `/api/native-query-snippet${existing ? '/' + existing.id : ''}`,
@@ -94,5 +87,6 @@ export async function applyPlan(api, definition, options, reviewed, {notify = ()
     notify(`${decision.action}: ${node.key}`);
   }
   return {ids: Object.fromEntries(ids), conflicts: fresh.actions.filter(a => ['conflict', 'blocked'].includes(a.action)),
-    retained: fresh.retained, omitted: definition.unavailable, unsupportedMetrics: definition.unsupported?.length || 0};
+    retained: fresh.retained, omitted: definition.unavailable, unsupportedMetrics: definition.unsupported?.length || 0,
+    ...(state.ownership ? {ownership: recordIds(state.ownership, Object.fromEntries(ids), nodes)} : {})};
 }
