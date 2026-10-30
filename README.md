@@ -16,6 +16,31 @@ the copy and the Metabase content are yours.
 _The demo runs on SourceMedium's demo warehouse with synthetic data. No sign-in
 required. It is a preview, never your own data._
 
+## Two ways to run it
+
+<!-- "SourceMedium Dashboards" is a placeholder product name awaiting name and
+attribution approval (smstack specs/26q4/metabase-scale-spec.md, section 17).
+Replace it here and in the docs once approved. -->
+
+The same foundation installs either way:
+
+- **Your own Metabase.** You run Metabase (on your own server or Metabase
+  Cloud) and install this template into it. You get full control: users,
+  permissions, settings and any change to the foundation. This README covers
+  this path.
+- **Hosted by SourceMedium.** SourceMedium Dashboards, built on open-source
+  Metabase, is a Metabase that SourceMedium runs for your workspace, rolling
+  out to selected workspaces. SourceMedium installs this foundation, keeps it
+  current and signs your team in with their SourceMedium accounts. It is
+  managed, so Metabase administration, subscriptions, public links and
+  embedding are not included, and you cannot install your own changes to the
+  template there. An admin or editor sets it up from **Dashboards & Apps**;
+  you can move from it to your own Metabase later.
+
+[Which Metabase should I use?](https://sourcemedium.com/docs/onboarding/analytics-tools/choose-metabase)
+compares the two. SourceMedium is not affiliated with or endorsed by
+Metabase, Inc.
+
 ## What you get
 
 One **SourceMedium foundation dashboard** with a tab per view, and each view
@@ -162,6 +187,11 @@ install.
 - **Undo** by archiving the SourceMedium foundation collection and its
   `SM ...` SQL snippets. Warehouse access is unaffected.
 
+On SourceMedium Dashboards you run none of these: SourceMedium refreshes and
+upgrades the foundation for you, and the foundation collection is view-only.
+To change a question there, duplicate it into **Our dashboards** or your
+personal collection and edit the copy.
+
 ## Make it yours
 
 The foundation is two folders: [`foundation/questions.mjs`](foundation/questions.mjs)
@@ -169,6 +199,8 @@ lists every question and dashboard, and [`foundation/sql/`](foundation/sql) hold
 each question's SQL. [Customize the foundation](docs/customize.md) shows how to
 change a question, add one, add a tab or remove one, then check and install it.
 Use **Use this template** on GitHub (or a private copy) to keep your changes.
+Your changed copy installs into your own Metabase; SourceMedium Dashboards
+always installs SourceMedium's release of this template.
 
 ## Cost and access
 
