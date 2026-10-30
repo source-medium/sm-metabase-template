@@ -31,7 +31,7 @@ export function ownershipMap(map, scope) {
       objects.some(o => !kinds.includes(o?.kind) || !Number.isSafeInteger(o.id) || o.id <= 0) || new Set(ids).size !== ids.length) {
     throw new Error('The ownership map is invalid. No content was changed.');
   }
-  if (map.scope !== scope) throw new Error('The ownership map belongs to another URL, database, dataset or collection. No content was changed.');
+  if (map.scope !== scope) throw new Error('The ownership map belongs to another database, dataset or collection. No content was changed.');
   return map;
 }
 
