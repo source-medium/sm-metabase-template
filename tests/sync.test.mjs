@@ -20,16 +20,19 @@ test('comparison numbers use their own value for the empty state and preserve sh
   const definition = full();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const fields = {kpis: 'net_revenue', kpi_orders: 'summary_orders', kpi_spend: 'ad_spend',
-    kpi_mer: 'mer', kpi_order_value: 'net_revenue_per_summary_order', kpi_sessions: 'sessions'};
+    kpi_mer: 'mer', kpi_order_value: 'net_revenue_per_summary_order', kpi_sessions: 'sessions',
+    product_totals: 'net_revenue', product_units: 'units', geography_totals: 'net_revenue',
+    geography_orders_total: 'orders', geography_coverage: 'mapped_coverage'};
   for (const [key, column] of Object.entries(fields)) {
     const card = m.cards.get(installed.ids[`question:${key}`]);
     assert.equal(card.visualization_settings['scalar.field'], column);
     assert.ok(card.dataset_query.native.query.endsWith(`WHERE number_card.\`${column}\` IS NOT NULL\n`));
     assert.equal(card.dataset_query.native['template-tags'].store.required, true);
-    assert.match(card.dataset_query.native.query, /SAFE_DIVIDE\(\{\{snippet: SM /);
-    assert.match(card.dataset_query.native.query, /comparison\.net_revenue_per_summary_order AS compare_net_revenue_per_summary_order/);
     assert.equal(card.visualization_settings['scalar.comparisons'][0].column, `compare_${column}`);
   }
+  const revenue = m.cards.get(installed.ids['question:kpis']);
+  assert.match(revenue.dataset_query.native.query, /SAFE_DIVIDE\(\{\{snippet: SM /);
+  assert.match(revenue.dataset_query.native.query, /comparison\.net_revenue_per_summary_order AS compare_net_revenue_per_summary_order/);
   const trend = m.cards.get(installed.ids['question:trend_order_value']);
   assert.ok(!trend.dataset_query.native.query.includes('number_card'), 'line charts must keep null gaps and comparison-only dates');
   const stable = await plan(m.api, definition);
