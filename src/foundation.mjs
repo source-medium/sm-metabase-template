@@ -105,11 +105,8 @@ export function definitions(catalog, tables, sql, options) {
     nodes.push({key: `question:${question.key}`, kind: 'card', dependencies, body});
     uses.set(`question:${question.key}`, filters);
     for (const variant of question.variants || []) {
-      nodes.push({key: `question:${variant.key}`, kind: 'card', dependencies, body: ids => {
-        const card = body(ids);
-        return {...card, name: variant.name, display: variant.display, visualization_settings: {
-          ...variant.settings, column_settings: card.visualization_settings.column_settings}};
-      }});
+      nodes.push({key: `question:${variant.key}`, kind: 'card', dependencies,
+        body: ids => sharedSqlCard({...question, ...variant, settings: variant.settings}, sql[question.key], options, table, ids || new Map(), catalog.metrics)});
       uses.set(`question:${variant.key}`, filters);
     }
   }
