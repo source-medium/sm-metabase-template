@@ -92,6 +92,14 @@ export function nativeCard(recipe, sql, options, table, metrics = []) {
       ...recipe.columns?.[name]};
     return Object.keys(settings).length ? [[JSON.stringify(['name', name]), settings]] : [];
   }));
+  // Metabase's comparison number throws when rows exist but the selected value
+  // is null (for example, revenue / order with no orders). Keep undefined ratios
+  // undefined and return no rows so Metabase uses its normal empty state. Zero
+  // is still a valid value, and comparison columns retain their original values.
+  if (recipe.display === 'smartscalar' && recipe.settings?.['scalar.field']) {
+    const column = recipe.settings['scalar.field'].replaceAll('\\', '\\\\').replaceAll('`', '\\`');
+    sql = `SELECT * FROM (\n${sql.trim().replace(/;$/, '')}\n) AS number_card\nWHERE number_card.\`${column}\` IS NOT NULL\n`;
+  }
   return {name: recipe.name, type: 'question', display: recipe.display || 'table', parameters: [],
     description: recipe.description, visualization_settings: {column_settings, ...(recipe.settings || {})},
     dataset_query: {database: options.database, type: 'native', native: {

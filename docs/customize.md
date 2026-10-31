@@ -67,6 +67,9 @@ For a second visualization of the same SQL (a chart beside a table), add a
 with comparisons uses `display: 'smartscalar'` with `scalar(column)`, which
 reads the question's `compare_<column>` and `compare2_<column>` outputs; a
 table that shows only some columns uses `showing(all, shown)`.
+Comparison number cards show Metabase's normal empty state when their selected
+value is undefined, such as revenue per order with no orders. Zero still displays
+as zero. Tables and line charts retain null values and gaps.
 
 ## Add a tab or dashboard
 
