@@ -37,6 +37,17 @@ function copy(m, store, id, changes = {}) {
 const marked = m => [...m.collections.values(), ...m.cards.values(), ...m.dashboards.values(), ...m.snippets.values()]
   .filter(o => marker(o.description)).map(o => marker(o.description).key).sort();
 
+test('a plan says whether each unsupported item is left-out content or a refused metric', async () => {
+  const m = fakeMetabase();
+  const d = {...define(), unavailable: [{name: 'A question', reason: 'A missing table.'}],
+    unsupported: [{name: 'a_metric', reason: 'Alias; use another.'}]};
+  const {plan: reviewed} = await plan(m, d);
+  assert.deepEqual(reviewed.unsupported, [
+    {name: 'A question', reason: 'A missing table.', kind: 'content'},
+    {name: 'a_metric', reason: 'Alias; use another.', kind: 'metric'},
+  ]);
+});
+
 test('a customer copy of a managed question blocks a discovered install, never a recorded one', async () => {
   const d = full();
   // The 2026-10-30 baseline: discovering ownership lines finds the copy as a second claim.

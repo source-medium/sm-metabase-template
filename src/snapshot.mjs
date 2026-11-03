@@ -26,11 +26,13 @@ function reportUnmarked(definitions, state, home, cards, dashboards) {
   }
 }
 
+// Versions verified end to end on the demo warehouse: v0.64.1 and v0.65.0-beta
+// (install, unchanged second plan, every question and dashboard card run).
+export const SUPPORTED_ENGINES = /^v[01]\.6[45]\./;
+
 export async function snapshot(api, options, definitions = []) {
   const version = await api('GET', '/api/session/properties');
-  // Versions verified end to end on the demo warehouse: v0.64.1 and v0.65.0-beta
-  // (install, unchanged second plan, every question and dashboard card run).
-  if (!/^v[01]\.6[45]\./.test(version.version?.tag || '')) throw new Error('This installer supports Metabase 0.64 and 0.65 (or 1.64 and 1.65). No content was changed.');
+  if (!SUPPORTED_ENGINES.test(version.version?.tag || '')) throw new Error('This installer supports Metabase 0.64 and 0.65 (or 1.64 and 1.65). No content was changed.');
   const target = await api('GET', `/api/collection/${options.collection}`);
   // The target is the parent of the managed subcollection. Passing the managed
   // collection itself would plan a second foundation nested inside the first.
@@ -244,7 +246,8 @@ export function makePlan(definition, state, options) {
   const retained = [...state.owned.keys()].filter(key => !nodes.some(n => n.key === key));
   const review = {format: 1, target: {url: options.url, database: options.database, dataset: options.dataset,
     metadataDataset: options.metadataDataset, collection: options.collection, store: options.store || null, asOf: options.asOf},
-    actions, unsupported: [...definition.unavailable, ...(definition.unsupported ?? [])], retained,
+    actions, unsupported: [...definition.unavailable.map(item => ({...item, kind: 'content'})),
+      ...(definition.unsupported ?? []).map(item => ({...item, kind: 'metric'}))], retained,
     ...(definition.formatting ? {formatting: definition.formatting} : {}),
     // A plan reviewed against one ownership map is stale once the map changes.
     ...(state.ownership ? {ownership: {revision: state.ownership.revision}} : {})};
