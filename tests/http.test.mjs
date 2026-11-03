@@ -177,7 +177,7 @@ test('a warehouse without synced store currencies still plans, and the plan list
     [withoutCurrency, 'dim_stores has no synced store_currency_code.']]) {
     const {plan, currencyQueries} = await planWith(synced, ['CAD', 'USD']);
     assert.deepEqual(currencyQueries, []);
-    assert.deepEqual(currencyNote(plan), [{name: 'Store currency check', reason}]);
+    assert.deepEqual(currencyNote(plan), [{name: 'Store currency check', reason, kind: 'content'}]);
     assert.ok(plan.actions.some(a => a.key === 'question:kpis' && a.action === 'create'));
   }
 });

@@ -160,8 +160,8 @@ cd sm-metabase-template
    instead. Retention's cutoff defaults to
    the previous completed UTC month; `--as-of-month YYYY-MM-01` picks another.
 4. Review `foundation-plan.json`: `changes` (what it creates or updates),
-   `unsupported` (catalog metrics it cannot express exactly, each with a
-   reason), `retained`, `formatting` and any conflicts. Planning reads
+   `unsupported` (each with a reason and a `kind`: `content` it left out, or a
+   catalog `metric` it cannot express exactly), `retained`, `formatting` and any conflicts. Planning reads
    metadata and runs small BigQuery queries on the metric catalog and, without
    `--store`, on your stores' currencies; it changes nothing.
 5. Apply the reviewed plan with the same options:
