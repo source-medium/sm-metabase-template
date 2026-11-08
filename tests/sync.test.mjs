@@ -131,10 +131,12 @@ test('a stale ownership record on a dashboard that matches its definition is ref
     [['dashboard:foundation', 'update', 'Content matches the definition; its ownership record is refreshed.']]);
   await applyPlan(m.api, definition, options, refresh);
   assert.ok((await plan(m.api, definition)).actions.every(a => a.action === 'unchanged'));
-  // A customer who moves a card keeps the move, with or without a current record.
-  const moved = m.dashboards.get(dashboard.id);
-  moved.dashcards[0].row += 1;
+  // A customer who moves a card keeps the move, with or without a current record. The move
+  // goes through Metabase's API, as the editor's does, so it leaves a revision.
+  const current = structuredClone(m.dashboards.get(dashboard.id));
+  await m.api('PUT', `/api/dashboard/${dashboard.id}`, {dashcards: current.dashcards.map((c, i) => i === 0 ? {...c, row: c.row + 1} : c)});
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
+  const moved = m.dashboards.get(dashboard.id);
   moved.description = stale(moved.description);
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
 });
@@ -271,7 +273,7 @@ test('moving a managed dashboard is preserved when its source definitions change
   const m = fakeMetabase(); const d = define();
   const installed = await applyPlan(m.api, d, options, await plan(m.api, d));
   const id = installed.ids['dashboard:summary'];
-  m.dashboards.get(id).collection_id = 99;
+  await m.api('PUT', `/api/dashboard/${id}`, {collection_id: 99});
   const before = structuredClone(m.dashboards.get(id));
   const next = {...d, nodes: d.nodes.map(n => n.key === 'dashboard:summary' ?
     {...n, layout: {...n.layout, name: 'Updated summary'}, body: ids => ({...n.body(ids), name: 'Updated summary'})} : n)};
@@ -473,4 +475,24 @@ test('a card without inline filters reads as it did before they existed', () => 
   const before = dashboardContent({name: 'd', dashcards: [card]});
   assert.equal(digest(dashboardContent({name: 'd', dashcards: [{...card, inline_parameters: []}]})), digest(before));
   assert.notEqual(digest(dashboardContent({name: 'd', dashcards: [{...card, inline_parameters: ['grain']}]})), digest(before));
+});
+
+test('a dashboard Metabase rewrote without a revision updates; one edited through the API stays a conflict', async () => {
+  const m = fakeMetabase();
+  const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const summary = installed.ids['dashboard:summary'];
+  const paid = installed.ids['dashboard:paid'];
+  // Metabase rewrites stored content on its own (no revision): not a customer edit.
+  m.rewriteSilently(summary, d => ({...d, dashcards: d.dashcards.map((c, i) => i === 0 ? {...c, visualization_settings: {...c.visualization_settings, 'card.title': null}} : c)}));
+  // A person resizes a card in the editor: Metabase records a revision.
+  const edited = structuredClone(m.dashboards.get(paid));
+  await m.api('PUT', `/api/dashboard/${paid}`, {dashcards: edited.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
+  const next = await plan(m.api, definition);
+  const action = key => next.actions.find(a => a.key === key);
+  assert.equal(action('dashboard:summary').action, 'update');
+  assert.match(action('dashboard:summary').reason, /Not edited since its last install/);
+  assert.equal(action('dashboard:paid').action, 'conflict', 'an edit is never overwritten');
+  await applyPlan(m.api, definition, options, next).catch(() => {});
+  assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:summary').action, 'unchanged');
 });

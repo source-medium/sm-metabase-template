@@ -26,6 +26,22 @@ function reportUnmarked(definitions, state, home, cards, dashboards) {
   }
 }
 
+// Metabase rewrites a dashboard's stored content without a revision after the installer
+// records it (observed on the demo's Postgres application database), so the recorded
+// content can stop matching an untouched dashboard. Every edit through the UI or the API
+// leaves a revision. A dashboard whose newest revision is the installer's own ownership
+// stamp, setting exactly the description it carries now, has had no edit since that record:
+// it may be updated. Any later revision is an edit, and the plan keeps reporting a conflict.
+async function unrevisedSinceRecord(api, dashboard) {
+  const saved = marker(dashboard.description);
+  if (!saved || saved.pending || dashboard.archived) return false;
+  const readings = [dashboardContent(dashboard), ...recordedDashboardContents(dashboard)];
+  if (readings.some(c => digest(c) === saved.content)) return false;
+  const revisions = await api('GET', `/api/revision?entity=dashboard&id=${dashboard.id}`);
+  const newest = [...(Array.isArray(revisions) ? revisions : [])].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
+  return newest?.diff?.after?.description === dashboard.description;
+}
+
 // Versions verified end to end on the demo warehouse (install, upgrade, unchanged second
 // plan, every question and dashboard card run): v0.64.1 and v0.65.3, on 2026-11-08.
 export const SUPPORTED_ENGINES = /^v[01]\.6[45]\./;
@@ -88,6 +104,7 @@ export async function snapshot(api, options, definitions = []) {
       }
     }
   }
+  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
   return {scope, owned, duplicate, unmarked, collectionId: managedCollection?.id};
 }
 
@@ -160,6 +177,7 @@ async function recordedSnapshot(api, options, definitions, scope, all) {
     const home = owned.get('collection:foundation');
     if (home) reportUnmarked(definitions, {scope, owned, unmarked}, home, all.cards, all.dashboards);
   }
+  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
   const ownership = Object.keys(recovered).length ? {...map, revision: map.revision + 1, objects: {...map.objects, ...recovered}} : map;
   return {scope, owned, duplicate: new Set(), unmarked, collectionId: owned.get('collection:foundation')?.id, ownership, recovered: Object.keys(recovered)};
 }
@@ -219,6 +237,8 @@ export function makePlan(definition, state, options) {
     if (result.action === 'conflict' && node.kind === 'dashboard' && !existing.archived && marker(existing.description) &&
         !marker(existing.description).pending && matchesDefinition(existing, target, state)) {
       result = {action: 'update', reason: 'Content matches the definition; its ownership record is refreshed.'};
+    } else if (result.action === 'conflict' && node.kind === 'dashboard' && existing?._unrevised) {
+      result = {action: 'update', reason: 'Not edited since its last install (its newest revision is the installer\'s record); Metabase rewrote its stored content.'};
     }
     if (existing && !existing.archived && marker(existing.description)?.pending) {
       const current = existing._kind === 'card' ? cardContent(existing) : ['collection', 'snippet'].includes(existing._kind) ? contentOf(existing) :
