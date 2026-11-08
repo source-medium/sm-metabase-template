@@ -103,3 +103,15 @@ test('includes expand once, and comments name no filter', () => {
     for (const comment of text.matchAll(/--[^\n]*/g)) assert.ok(!comment[0].includes('{{'), `${question.key} comment: ${comment[0]}`);
   }
 });
+
+test('tables name channels and ad platforms; filters and keys keep the stored value', () => {
+  for (const key of ['orders', 'contributions', 'order_detail'])
+    assert.match(sql[key], /WHEN 'online_dtc' THEN 'Online DTC'/, `${key} names sales channels`);
+  for (const key of ['paid_channel', 'paid_campaign', 'creatives', 'paid_trend', 'paid_breakdown'])
+    assert.match(sql[key], /WHEN 'meta_ads' THEN 'Meta'/, `${key} names ad platforms`);
+  // An unknown value shows as stored rather than guessed at.
+  assert.match(sql.contributions, /ELSE IFNULL\(sm_channel, '\(none\)'\)/);
+  // The breakdown joins its periods on the stored platform, not its display name.
+  assert.match(sql.paid_breakdown, /ELSE IFNULL\(source_system, '\(none\)'\)\n {4}END AS breakdown_key/);
+  for (const key of ['paid_channel', 'creatives']) assert.ok(sql[key].includes('{{ad_platform}}'), `${key} filters the stored platform`);
+});

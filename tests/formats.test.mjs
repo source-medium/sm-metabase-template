@@ -72,9 +72,17 @@ test('every native output is a catalog metric, a declared unit or a dimension, a
   const kpis = card(definition, 'question:kpis');
   assert.deepEqual(setting(kpis, 'net_revenue'), {column_title: 'Net revenue', decimals: 2});
   assert.deepEqual(setting(kpis, 'mer'), {column_title: 'MER', decimals: 2});
-  assert.deepEqual(setting(kpis, 'summary_orders'), {column_title: 'Summary orders'});
+  assert.deepEqual(setting(kpis, 'summary_orders'), {column_title: 'Orders'});
   assert.deepEqual(setting(kpis, 'compare_net_revenue'), {column_title: 'Net revenue (comparison)', decimals: 2}, 'comparisons display like their base');
   assert.deepEqual(setting(kpis, 'compare2_mer'), {column_title: 'MER (second comparison)', decimals: 2});
+  // Changes are colored only where higher is better: spend and mixed-measure columns stay plain.
+  const colored = key => (card(definition, `question:${key}`).visualization_settings['table.column_formatting'] || [])
+    .map(rule => [rule.operator, rule.columns.join(',')]);
+  assert.deepEqual(colored('comparison'), [['>', 'net_revenue_change,summary_orders_change,mer_change'],
+    ['<', 'net_revenue_change,summary_orders_change,mer_change']]);
+  assert.deepEqual(colored('stores'), [['>', 'net_revenue_change'], ['<', 'net_revenue_change']]);
+  for (const key of ['paid_breakdown', 'deductions', 'product']) assert.deepEqual(colored(key), [], `${key} stays uncolored`);
+  assert.equal(card(definition, 'question:geography_map').visualization_settings['table.column_formatting'], undefined);
   assert.deepEqual(setting(card(definition, 'question:paid_channel'), 'click_through_rate'),
     {column_title: 'CTR', number_style: 'percent'});
   assert.deepEqual(setting(card(definition, 'question:creatives'), 'image_url'), {column_title: 'Image', view_as: 'image'});

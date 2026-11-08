@@ -45,6 +45,15 @@ const scalar = column => ({'scalar.field': column, 'scalar.comparisons': [
 const trendLine = (column, title) => ({'graph.dimensions': ['date'], 'graph.metrics': [column, `compare_${column}`],
   'graph.x_axis.title_text': 'Date', 'graph.y_axis.title_text': title,
   series_settings: {[column]: {title}, [`compare_${column}`]: {title: `${title} (comparison)`, 'line.style': 'dashed'}}});
+// Green when a change column rose and red when it fell, for measures where higher is
+// better. Spend and mixed-measure columns (Revenue and deductions, product rankings that
+// can rank refunds) stay uncolored: a rise there is neither good nor bad on its own. The
+// sign stays in the number, so color is never the only cue.
+const UP = '#84BB4C';
+const DOWN = '#ED6E6E';
+const changeColors = (...columns) => ({'table.column_formatting': [
+  {id: 0, columns, type: 'single', operator: '>', value: 0, color: UP, highlight_row: false},
+  {id: 1, columns, type: 'single', operator: '<', value: 0, color: DOWN, highlight_row: false}]});
 // A table showing only some of its question's columns, in SQL order.
 const showing = (all, shown) => ({'table.columns': all.map(name => ({name, enabled: shown.includes(name)}))});
 const BUSINESS = ['period', 'net_revenue', 'summary_orders', 'net_revenue_per_summary_order', 'ad_spend', 'mer', 'sessions',
@@ -81,32 +90,32 @@ export const questions = [
     description: 'Selected dates against Compare with and Second comparison. Published summary measures; use one currency and consistent source calendars.',
     metrics: {...summaryMetrics, sessions: 'website_sessions_summary'},
     variants: [
-      {key: 'kpi_orders', name: 'Summary orders', display: 'smartscalar', settings: scalar('summary_orders')},
+      {key: 'kpi_orders', name: 'Orders', display: 'smartscalar', settings: scalar('summary_orders')},
       {key: 'kpi_spend', name: 'Ad spend', display: 'smartscalar', settings: scalar('ad_spend')},
       {key: 'kpi_mer', name: 'Marketing efficiency (MER)', display: 'smartscalar', settings: scalar('mer')},
-      {key: 'kpi_order_value', name: 'Revenue per summary order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
+      {key: 'kpi_order_value', name: 'Revenue per order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
       {key: 'kpi_sessions', name: 'Website sessions', display: 'smartscalar', settings: scalar('sessions')}]},
-  {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date',
+  {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change', 'summary_orders_change', 'mer_change'),
     description: 'The selected dates against Compare with and Second comparison. Previous period follows the selection: one day compares with the same weekday a week earlier, a calendar month, quarter or year with the one before, other ranges with the days just before. Periods run from the first to the last selected date with summary rows; Change is the selected period divided by the comparison period, minus one.',
     metrics: pick(summaryMetrics, 'net_revenue', 'summary_orders', 'ad_spend', 'mer')},
   {key: 'trend', name: 'Net revenue by day', table: SUMMARY, date: 'date', display: 'line', settings: trendLine('net_revenue', 'Net revenue'),
     description: 'Daily or cumulative values (Trend values), with Compare with dashed, day for day. Cumulative values sum each day from the period start, so ratios stay ratios of sums. Missing days are gaps.',
     metrics: {...summaryMetrics, sessions: 'website_sessions_summary'},
     variants: [
-      {key: 'trend_orders', name: 'Summary orders by day', display: 'line', settings: trendLine('summary_orders', 'Summary orders')},
-      {key: 'trend_order_value', name: 'Revenue per summary order by day', display: 'line', settings: trendLine('net_revenue_per_summary_order', 'Revenue / order')},
+      {key: 'trend_orders', name: 'Orders by day', display: 'line', settings: trendLine('summary_orders', 'Orders')},
+      {key: 'trend_order_value', name: 'Revenue per order by day', display: 'line', settings: trendLine('net_revenue_per_summary_order', 'Revenue / order')},
       {key: 'trend_spend', name: 'Ad spend by day', display: 'line', settings: trendLine('ad_spend', 'Ad spend')},
       {key: 'trend_mer', name: 'Marketing efficiency by day', display: 'line', settings: trendLine('mer', 'MER')},
       {key: 'trend_sessions', name: 'Website sessions by day', display: 'line', settings: trendLine('sessions', 'Sessions')}]},
-  {key: 'revenue_changes', name: 'Biggest changes', table: SUMMARY, date: 'date',
+  {key: 'revenue_changes', name: 'Biggest changes', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_difference', 'net_revenue_change'),
     description: 'The three selected dates whose net revenue moved most against the same day of Compare with.',
     metrics: pick(summaryMetrics, 'net_revenue')},
-  {key: 'contributions', name: 'Sales channel and sub-channel contributions', table: SUMMARY, date: 'date',
+  {key: 'contributions', name: 'Sales channel and sub-channel contributions', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_difference'),
     description: 'Net revenue by valid sales channel and sub-channel against Compare with, largest absolute change first.',
     metrics: pick(summaryMetrics, 'net_revenue')},
   {key: 'deductions', name: 'Revenue and deductions', table: SUMMARY, date: 'date',
     description: 'Published signs, against Compare with; the unreconciled difference makes remaining adjustments visible without attributing a cause.'},
-  {key: 'purchase_mix', name: 'New versus repeat purchases', table: SUMMARY, date: 'date',
+  {key: 'purchase_mix', name: 'New versus repeat purchases', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_difference'),
     description: 'Published order measures, not unique buyers, against Compare with. Classification coverage can prevent reconciliation to headline totals.'},
   {key: 'business', name: 'Business summary', table: SUMMARY, date: 'date', settings: showing(BUSINESS,
     ['period', 'net_revenue', 'summary_orders', 'net_revenue_per_summary_order', 'ad_spend', 'mer', 'sessions']),
@@ -122,7 +131,7 @@ export const questions = [
   {key: 'store_context', name: 'Reporting context', table: 'dim_stores',
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'store_timezone'], [SUMMARY]: ['sm_store_id', 'date']},
     description: 'Each store\'s reporting currency and time zone, and its latest date with summary rows. Dates are calendar dates in the store\'s time zone; the latest day may be incomplete.'},
-  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date',
+  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change'),
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'brand_name', 'store_logo_url']},
     columns: {logo_url: image},
     description: 'One row per store, never a cross-store total: stores can report in different currencies. Revenue change is against Compare with. Select a store to open its executive summary.',
@@ -181,12 +190,12 @@ export const questions = [
     variants: [
       {key: 'geography_orders_total', name: 'Valid orders', display: 'smartscalar', settings: scalar('orders')},
       {key: 'geography_coverage', name: 'Mapped-order coverage', display: 'smartscalar', settings: scalar('mapped_coverage')}]},
-  {key: 'geography', name: 'Shipping countries', table: ORDERS, date: PROCESSED,
+  {key: 'geography', name: 'Shipping countries', table: ORDERS, date: PROCESSED, settings: changeColors('net_revenue_change'),
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid orders by shipping country and processed date, with revenue change against Compare with. Select a country to see its regions. Select one store: currencies can differ between stores.',
     variants: [{key: 'geography_map', name: 'Valid orders by country', display: 'map',
       settings: {'map.type': 'region', 'map.region': 'world_countries', 'map.dimension': 'country', 'map.metric': 'orders'}}]},
-  {key: 'geography_regions', name: 'Shipping regions', table: ORDERS, date: PROCESSED,
+  {key: 'geography_regions', name: 'Shipping regions', table: ORDERS, date: PROCESSED, settings: changeColors('net_revenue_change'),
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid orders by shipping region in the selected country (every country when none is selected). US states are normalized to their two-letter codes. Select a region to scope the totals and orders.'},
   {key: 'geography_states', name: 'Valid orders by US state', table: ORDERS, date: PROCESSED, display: 'map',
@@ -221,11 +230,11 @@ export const questions = [
 /** Column headings Metabase shows instead of the SQL alias. */
 export const columnTitles = {
   date: 'Date', period: 'Period', start_date: 'From', end_date: 'To', comparison_date: 'Comparison date',
-  days_with_rows: 'Days with rows', net_revenue: 'Net revenue', gross_revenue: 'Gross revenue', summary_orders: 'Summary orders',
+  days_with_rows: 'Days with rows', net_revenue: 'Net revenue', gross_revenue: 'Gross revenue', summary_orders: 'Orders',
   net_revenue_per_summary_order: 'Revenue / order', net_revenue_per_order: 'Revenue / order',
   ad_spend: 'Ad spend', mer: 'MER', sessions: 'Sessions', purchase_type: 'Purchase type', measure: 'Measure', amount: 'Amount',
   amount_difference: 'Change', net_revenue_difference: 'Revenue change',
-  period_net_revenue: 'Net revenue', period_summary_orders: 'Summary orders', period_ad_spend: 'Ad spend', period_mer: 'MER',
+  period_net_revenue: 'Net revenue', period_summary_orders: 'Orders', period_ad_spend: 'Ad spend', period_mer: 'MER',
   net_revenue_change: 'Net revenue change', summary_orders_change: 'Orders change', ad_spend_change: 'Ad spend change',
   mer_change: 'MER change', store_id: 'Store ID', store_name: 'Store', store_currency: 'Currency', brand_name: 'Brand',
   logo_url: 'Logo', time_zone: 'Time zone', latest_date: 'Latest summary date',
@@ -316,7 +325,7 @@ const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) 
 export function dashboards() {
   return [
     {key: 'dashboard:summary', name: 'SourceMedium executive summary',
-      description: 'Summary-system KPIs, Online DTC by default, against Compare with and Second comparison. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
+      description: 'Summary-system KPIs, every sales channel by default, against Compare with and Second comparison. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
       tabs: ['Overview', 'Business review'], cards: [
         layout('kpis', 0, 0, 8, 4, 0), layout('kpi_orders', 0, 8, 8, 4, 0), layout('kpi_spend', 0, 16, 8, 4, 0),
         layout('kpi_mer', 4, 0, 8, 4, 0), layout('kpi_order_value', 4, 8, 8, 4, 0), layout('kpi_sessions', 4, 16, 8, 4, 0),

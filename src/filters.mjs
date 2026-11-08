@@ -9,7 +9,10 @@
 const choice = (values, fallback) => ({type: 'string/=', sectionId: 'string', required: true, default: [fallback],
   isMultiSelect: false, values_query_type: 'list', values_source_type: 'static-list', values_source_config: {values}});
 const text = {type: 'string/=', sectionId: 'string', isMultiSelect: false};
-const comparisons = [['previous', 'Previous period'], ['year', 'Same period last year'], ['weekday', '52 weeks earlier'], ['off', 'Off']];
+// Last year, the Second comparison's default, matches the weekday for one day and the
+// calendar otherwise (foundation/sql/include/periods.sql); the next two are explicit.
+const comparisons = [['previous', 'Previous period'], ['last_year', 'Last year'], ['year', 'Same period last year'],
+  ['weekday', 'Same weekdays last year'], ['off', 'Off']];
 
 function registry({store, asOf}) {
   return [
@@ -17,14 +20,16 @@ function registry({store, asOf}) {
     {id: 'as_of_month', name: 'As-of month', variable: 'date', type: 'date/single', default: asOf, required: true},
     // sm_channel is the sales channel in every report. In the ad report, source_system is
     // the advertising platform that delivered the ad.
-    {id: 'channel', name: 'Channel', column: 'sm_channel', type: 'string/=', default: ['online_dtc']},
+    // No default: every sales channel, as in the App Starter and SourceMedium's AI tools.
+    // Summary order measures still count only the valid sales channels.
+    {id: 'channel', name: 'Channel', column: 'sm_channel', type: 'string/='},
     {id: 'ad_platform', name: 'Ad platform', column: 'source_system', type: 'string/='},
     // --store permits mixed-currency warehouses, so both dashboards and standalone
     // questions must take exactly one store. A field filter can accept several values.
     {id: 'store', name: 'Store', column: 'sm_store_id', type: 'string/=',
       ...(store ? {variable: 'text', ...text, required: true, default: [store]} : {})},
     {id: 'compare', name: 'Compare with', variable: 'text', ...choice(comparisons, 'previous')},
-    {id: 'compare2', name: 'Second comparison', variable: 'text', ...choice(comparisons, 'year')},
+    {id: 'compare2', name: 'Second comparison', variable: 'text', ...choice(comparisons, 'last_year')},
     {id: 'grain', name: 'Period', variable: 'text', ...choice([['day', 'Day'], ['week', 'Week'], ['month', 'Month']], 'day')},
     {id: 'trend_values', name: 'Trend values', variable: 'text', ...choice([['daily', 'Daily values'], ['cumulative', 'Cumulative values']], 'daily')},
     {id: 'campaign', name: 'Campaign name', column: 'ad_campaign_name', type: 'string/contains'},

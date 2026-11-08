@@ -62,11 +62,17 @@ delivers its tables, so a missing source never hides the others.
 | Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
 
 Comparisons are modeled on the [App Starter](https://github.com/source-medium/sm-app-template):
-**Compare with** and **Second comparison** choose the previous period, the same
-period last year or 52 weeks earlier. The previous period follows what the dates
-are: a single day compares with the same weekday a week earlier, a calendar
-month, quarter or year (complete, or to date) with the one before, and any other
-range with the same number of days just before it. Unlike the App Starter, the
+**Compare with** and **Second comparison** choose the previous period, last year,
+the same period last year or the same weekdays last year. The previous period
+follows what the dates are: a single day compares with the same weekday a week
+earlier, a calendar month, quarter or year (complete, or to date) with the one
+before, and any other range with the same number of days just before it. Last
+year, the Second comparison's default, is the same weekday last year for a single
+day and the same period last year otherwise. In tables, a change is green when
+it rose and red when it fell for measures where more is better; ad spend,
+deductions and product rankings stay uncolored, because a rise there is neither
+good nor bad on its own. Metabase number cards have no neutral color, so the Ad
+spend card keeps Metabase's green for a rise. Unlike the App Starter, the
 dates are the first and last days with data in the selection, a period to date
 ends within the last two days rather than exactly yesterday, and a calendar
 week compares as any other range. A card whose source your warehouse does not
@@ -87,9 +93,9 @@ counts, new and repeat orders) count SourceMedium's valid sales channels:
 `online_dtc`, `amazon`, `retail`, `wholesale` and `tiktok_shop`. Ad spend and
 sessions count every row. These are the same definitions the
 [App Starter](https://github.com/source-medium/sm-app-template) and SourceMedium's
-AI tools use. The default scope differs: the Channel filter here starts on
-`online_dtc`, while the App Starter starts on every sales channel, so clear
-Channel to compare totals with it. [What the numbers mean](https://sourcemedium.com/docs/onboarding/analytics-tools/connect-metabase#what-the-numbers-mean)
+AI tools use, and the Channel filter starts on every sales channel, as the App
+Starter does, so the default totals match. Tables show channels and ad
+platforms by name (Online DTC, Meta); filters keep the stored value. [What the numbers mean](https://sourcemedium.com/docs/onboarding/analytics-tools/connect-metabase#what-the-numbers-mean)
 explains each one.
 
 ## Before you start

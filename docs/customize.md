@@ -67,6 +67,10 @@ For a second visualization of the same SQL (a chart beside a table), add a
 with comparisons uses `display: 'smartscalar'` with `scalar(column)`, which
 reads the question's `compare_<column>` and `compare2_<column>` outputs; a
 table that shows only some columns uses `showing(all, shown)`.
+Number cards color a rise green; for a measure where lower is better, add
+`'scalar.switch_positive_negative': true` to its settings (Metabase has no neutral
+color for them). A table's change columns take `changeColors(...columns)` only
+when higher is better: leave spend and columns that mix measures uncolored.
 Comparison number cards show Metabase's normal empty state when their selected
 value is undefined, such as revenue per order with no orders. Zero still displays
 as zero. Tables and line charts retain null values and gaps.

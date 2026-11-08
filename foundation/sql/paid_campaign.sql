@@ -1,5 +1,6 @@
 SELECT
-  source_system AS ad_platform,
+  -- @include ad_platform_name
+  AS ad_platform,
   ad_account_id,
   ad_campaign_id,
   MAX(ad_campaign_name) AS campaign_name,

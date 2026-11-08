@@ -1,7 +1,8 @@
 WITH measures AS (
   SELECT
     CASE {{grain}} WHEN 'week' THEN DATE_TRUNC(date, WEEK(MONDAY)) WHEN 'month' THEN DATE_TRUNC(date, MONTH) ELSE date END AS period,
-    IFNULL(source_system, '(none)') AS ad_platform,
+    -- @include ad_platform_name
+    AS ad_platform,
     SUM(ad_spend) AS ad_spend,
     SUM(ad_impressions) AS impressions,
     SUM(ad_clicks) AS clicks,

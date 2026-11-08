@@ -1,7 +1,8 @@
 WITH creatives AS (
   SELECT
     ARRAY_AGG(COALESCE(ad_creative_image_url, ad_creative_thumbnail_url) IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS image_url,
-    source_system AS ad_platform,
+    -- @include ad_platform_name
+    AS ad_platform,
     ad_creative_id AS creative_id,
     MAX(ad_creative_title) AS creative_title,
     MAX(ad_creative_body) AS creative_body,

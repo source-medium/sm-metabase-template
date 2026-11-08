@@ -17,7 +17,8 @@ spend AS (
       WHEN 'campaign' THEN COALESCE(ad_campaign_name, ad_campaign_id, '(none)')
       WHEN 'campaign_type' THEN IFNULL(ad_campaign_type, '(none)')
       WHEN 'campaign_tactic' THEN IFNULL(ad_campaign_tactic, '(none)')
-      ELSE IFNULL(source_system, '(none)')
+      ELSE
+      -- @include ad_platform_name
     END) AS name,
     SUM(ad_spend) AS ad_spend
   FROM periods
