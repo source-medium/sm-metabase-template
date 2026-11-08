@@ -7,7 +7,8 @@ WITH selected AS (
 channel_groups AS (
   SELECT
     periods.position,
-    IFNULL(sm_channel, '(none)') AS channel,
+    -- @include channel_name
+    AS channel,
     IFNULL(sm_sub_channel, '(none)') AS sub_channel,
     SUM(IF(sm_channel IN ('online_dtc', 'amazon', 'retail', 'wholesale', 'tiktok_shop'), order_net_revenue, 0)) AS net_revenue
   FROM periods

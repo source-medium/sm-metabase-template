@@ -72,7 +72,10 @@ test('native cards consume canonical snippets and preserve required dates and op
   assert.equal(tags.date.required, true);
   assert.equal(tags.date.default, 'past28days');
   assert.deepEqual(tags.compare, {id: 'compare', name: 'compare', 'display-name': 'Compare with', required: true, type: 'text', default: 'previous'});
-  assert.deepEqual(tags.channel.default, ['online_dtc']);
+  // Last year matches the weekday for one day and the calendar otherwise (include/periods.sql).
+  assert.equal(tags.compare2.default, 'last_year');
+  assert.match(card.dataset_query.native.query, /WHEN 'last_year' THEN IF\(kind = 'day', DATE_SUB\(start_date, INTERVAL 364 DAY\), DATE_SUB\(start_date, INTERVAL 1 YEAR\)\)/);
+  assert.equal(tags.channel.default, undefined, 'every sales channel by default, as in the App Starter');
   assert.ok(card.dataset_query.native.query.includes('snippet: SM'));
   assert.ok(card.dataset_query.native.query.includes('[[AND {{channel}}]]'));
   assert.ok(!JSON.stringify(card.dataset_query).includes('round'));

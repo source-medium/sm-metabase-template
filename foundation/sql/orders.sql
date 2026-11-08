@@ -7,7 +7,8 @@ WITH located AS (
     order_id,
     sm_order_key AS order_key,
     sm_store_id AS store_id,
-    IFNULL(sm_channel, '(none)') AS channel,
+    -- @include channel_name
+    AS channel,
     sm_sub_channel AS sub_channel,
     sm_order_type AS order_type,
     order_payment_status AS payment_status,

@@ -5,9 +5,12 @@
 -- selection is: one day compares with the same weekday a week earlier; a calendar month,
 -- quarter or year, complete or to date (ending within the last two days of
 -- CURRENT_DATE), with the one before it; any other range, a calendar week included,
--- with the same number of days just before it. A second comparison on the same dates
--- is left out. The App Starter's rules are similar but read the requested dates, end a
--- period to date exactly yesterday and treat calendar weeks as periods.
+-- with the same number of days just before it. Last year, the Second comparison's
+-- default, is the same weekday last year for one day (a calendar date last year usually
+-- fell on another weekday, and weekdays sell differently) and the same period last year
+-- otherwise. A second comparison on the same dates is left out. The App Starter's rules
+-- are similar but read the requested dates, end a period to date exactly yesterday and
+-- treat calendar weeks as periods.
 selection_shape AS (
   SELECT
     start_date,
@@ -37,7 +40,8 @@ comparison_candidates AS (
   SELECT
     comparison_choices.position,
     CASE mode
-      WHEN 'weekday' THEN IF(kind = 'day', 'Same weekday 52 weeks earlier', 'Same weekdays 52 weeks earlier')
+      WHEN 'weekday' THEN IF(kind = 'day', 'Same weekday last year', 'Same weekdays last year')
+      WHEN 'last_year' THEN IF(kind = 'day', 'Same weekday last year', 'Same period last year')
       WHEN 'year' THEN IF(kind = 'day', 'Same date last year', 'Same period last year')
       WHEN 'previous' THEN CASE kind
         WHEN 'day' THEN 'Same weekday last week'
@@ -52,6 +56,7 @@ comparison_candidates AS (
     END AS label,
     CASE mode
       WHEN 'weekday' THEN DATE_SUB(start_date, INTERVAL 364 DAY)
+      WHEN 'last_year' THEN IF(kind = 'day', DATE_SUB(start_date, INTERVAL 364 DAY), DATE_SUB(start_date, INTERVAL 1 YEAR))
       WHEN 'year' THEN IF(kind = 'day' AND FORMAT_DATE('%m-%d', start_date) = '02-29', NULL, DATE_SUB(start_date, INTERVAL 1 YEAR))
       WHEN 'previous' THEN CASE kind
         WHEN 'day' THEN DATE_SUB(start_date, INTERVAL 7 DAY)
@@ -66,6 +71,7 @@ comparison_candidates AS (
     END AS start_date,
     CASE mode
       WHEN 'weekday' THEN DATE_SUB(end_date, INTERVAL 364 DAY)
+      WHEN 'last_year' THEN IF(kind = 'day', DATE_SUB(end_date, INTERVAL 364 DAY), DATE_SUB(end_date, INTERVAL 1 YEAR))
       WHEN 'year' THEN IF(kind = 'day' AND FORMAT_DATE('%m-%d', start_date) = '02-29', NULL, DATE_SUB(end_date, INTERVAL 1 YEAR))
       WHEN 'previous' THEN CASE kind
         WHEN 'day' THEN DATE_SUB(end_date, INTERVAL 7 DAY)

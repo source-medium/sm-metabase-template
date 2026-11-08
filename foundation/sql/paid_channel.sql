@@ -1,5 +1,6 @@
 SELECT
-  source_system AS ad_platform,
+  -- @include ad_platform_name
+  AS ad_platform,
   SUM(ad_spend) AS ad_spend,
   SUM(ad_impressions) AS impressions,
   SUM(ad_clicks) AS clicks,
