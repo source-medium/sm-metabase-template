@@ -26,8 +26,8 @@ function reportUnmarked(definitions, state, home, cards, dashboards) {
   }
 }
 
-// Versions verified end to end on the demo warehouse: v0.64.1 and v0.65.0-beta
-// (install, unchanged second plan, every question and dashboard card run).
+// Versions verified end to end on the demo warehouse (install, upgrade, unchanged second
+// plan, every question and dashboard card run): v0.64.1 and v0.65.3, on 2026-11-08.
 export const SUPPORTED_ENGINES = /^v[01]\.6[45]\./;
 
 export async function snapshot(api, options, definitions = []) {
@@ -196,7 +196,7 @@ function matchesDefinition(existing, target, state) {
   const defined = {name: layout.name, collection_id: state.collectionId ?? null, description: layout.description,
     parameters: layout.parameters, tabs: layout.tabs.map((name, position) => ({name, position})),
     dashcards: placements.map(c => ({card_id: c.card_id, row: c.row, col: c.col, size_x: c.size_x, size_y: c.size_y,
-      visualization_settings: c.visualization_settings ?? {}, tab: c.tab,
+      visualization_settings: c.visualization_settings ?? {}, tab: c.tab, inline_parameters: c.inline_parameters,
       parameter_mappings: mappings(cards.get(c.key), c.card_id, layout.parameters)}))};
   return digest(withoutFieldTypes(placedContent(existing))) === digest(withoutFieldTypes(placedContent({...defined,
     tabs: defined.tabs.map(t => ({...t, id: t.position})), dashcards: defined.dashcards.map(({tab, ...c}) => ({...c, dashboard_tab_id: tab}))})));

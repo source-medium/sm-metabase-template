@@ -86,6 +86,12 @@ Metabase's 24-column grid: `layout(key, row, col, width, height, tab, clicks)`.
 `dashboard: 'dashboard:summary'` opens that dashboard (listed earlier) with the
 filter set instead.
 
+A filter that shapes one section, such as Trend values or Rank by, shows on that
+section's card: `withFilters(layout(...), 'trend_values')`. Scope filters (Date,
+Store, Channel, the comparisons, Ad platform, names) stay in the dashboard's filter
+bar. A filter is the dashboard's whatever card shows it, so in the combined
+dashboard one that cards on another tab also read (Period) stays in the bar.
+
 ## Remove something
 
 Delete its entry (and SQL file). The next plan lists the removed object under

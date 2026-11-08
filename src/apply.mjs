@@ -25,6 +25,7 @@ async function layoutDashboard(api, existing, node, ids, cards, collectionId, de
     const prior = existing.dashcards?.find(d => d.card_id === c.card_id);
     return {id: prior?.id || -(i + 1), card_id: c.card_id, row: c.row, col: c.col, size_x: c.size_x, size_y: c.size_y,
       dashboard_tab_id: c.tab === null ? null : tabs[c.tab].id, visualization_settings: c.visualization_settings,
+      inline_parameters: c.inline_parameters ?? [],
       parameter_mappings: mappings(cards.get(c.key), c.card_id, layout.parameters)};
   });
   return api('PUT', `/api/dashboard/${existing.id}`, {name: layout.name, description, collection_id: collectionId,

@@ -58,6 +58,20 @@ function combine(layouts, options) {
   return {...combinedDashboard, parameters: dashboardParameters(ids, options), tabs, cards};
 }
 
+// A card's `filters` show on that card (Metabase's inline_parameters) instead of the
+// dashboard's filter bar. A filter is a dashboard's, whatever card shows it, so it moves
+// only when every card that reads it sits on that card's tab: in the combined dashboard a
+// filter that tabs share (Period) stays in the bar, where each tab can reach it.
+function placeFilters(layout, uses) {
+  const ids = new Set(layout.parameters.map(p => p.id));
+  const cards = layout.cards.map(({filters = [], ...card}) => {
+    const inline = filters.filter(id => ids.has(id) &&
+      layout.cards.every(other => !uses.get(other.key)?.has(id) || other.tab === card.tab));
+    return inline.length ? {...card, inline_parameters: inline} : card;
+  });
+  return {...layout, cards};
+}
+
 // A question's own table and the tables it joins must be synced with the columns it reads.
 export function missingSource(question, tables, dataset) {
   const synced = name => tables.find(t => t.schema === dataset && t.name === name && t.active !== false);
@@ -120,7 +134,8 @@ export function definitions(catalog, tables, sql, options) {
     const cards = kept.map(c => c.tab === null ? c : {...c, tab: tabs.indexOf(layout.tabs[c.tab])});
     available.push({...layout, tabs, cards, parameters: dashboardParameters(new Set(cards.flatMap(c => [...uses.get(c.key)])), options)});
   }
-  const layouts = [...available, ...(available.length ? [combine(available, options)] : [])];
+  const layouts = [...available, ...(available.length ? [combine(available, options)] : [])]
+    .map(layout => placeFilters(layout, uses));
   for (const [index, layout] of layouts.entries()) {
     const targets = [...new Set(layout.cards.flatMap(c => (c.clicks || []).map(click => click.dashboard).filter(Boolean)))]
       .filter(key => layouts.some(l => l.key === key));
