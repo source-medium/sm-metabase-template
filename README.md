@@ -190,6 +190,9 @@ install.
   **SourceMedium foundation** collection, marked with an `SM_METABASE_V1`
   ownership line. A question you edit there is reported as a conflict, never
   overwritten; the installer never deletes content or adopts yours by name.
+  Metabase can rewrite a dashboard's stored content on its own; a dashboard
+  whose newest revision is still the installer's record has had no edit and is
+  updated, while any edit leaves a revision and is preserved.
 - **Undo** by archiving the SourceMedium foundation collection and its
   `SM ...` SQL snippets. Warehouse access is unaffected.
 

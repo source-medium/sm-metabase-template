@@ -107,6 +107,9 @@ export function fakeMetabase() {
   let reads = 0;
   // The user the API key acts as: 1 is the installer's; a test acts as a customer to copy content.
   let user = 1;
+  // Like Metabase, every dashboard write through the API leaves a revision of the fields it set.
+  const revisions = new Map();
+  let clock = 0;
   async function api(method, path, body) {
     calls.push({method, path, body: structuredClone(body)});
     if (fail?.(method, path, body)) throw new Error('Simulated transport failure.');
@@ -116,6 +119,10 @@ export function fakeMetabase() {
     const id = Number(parts[2]);
     if (path === '/api/session/properties') return {version: {tag: 'v0.64.1'}, 'setup-token': 'test-secret-not-for-plans'};
     if (path === '/api/user/current') return {id: user};
+    if (parts[1] === 'revision') {
+      const entityId = Number(url.searchParams.get('id'));
+      return structuredClone([...(revisions.get(entityId) || [])].reverse());
+    }
     if (kind === 'metric') {
       const all = dimensions.get(id);
       if (method === 'GET') return {added: structuredClone(all), addable: []};
@@ -153,8 +160,12 @@ export function fakeMetabase() {
         dashboard_tab_id: tabIds.get(c.dashboard_tab_id) ?? c.dashboard_tab_id}));
     }
     store.set(actual, object);
+    if (kind === 'dashboard') revisions.set(actual, [...(revisions.get(actual) || []),
+      {timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user}, diff: {before: null, after: structuredClone(body)}}]);
     return structuredClone(object);
   }
   return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;},
-    actAs: id => {user = id;}};
+    actAs: id => {user = id;},
+    // What Metabase does on its own: rewrite a dashboard's stored content, leaving no revision.
+    rewriteSilently: (id, change) => dashboards.set(id, change(structuredClone(dashboards.get(id))))};
 }
