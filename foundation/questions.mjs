@@ -95,6 +95,10 @@ export const questions = [
       {key: 'kpi_mer', name: 'Marketing efficiency (MER)', display: 'smartscalar', settings: scalar('mer')},
       {key: 'kpi_order_value', name: 'Revenue per order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
       {key: 'kpi_sessions', name: 'Website sessions', display: 'smartscalar', settings: scalar('sessions')}]},
+  {key: 'readout', name: 'Summary', table: SUMMARY, date: 'date', display: 'object',
+    description: 'One sentence on the selected dates against Compare with: net revenue, then whether ad spend moved and what that did to marketing efficiency, as the App Starter writes it. Money has no symbol, as in every card here.',
+    // Its title stays on this card: a shared column title would touch every installed card.
+    columns: {readout: {column_title: 'What moved'}}, metrics: pick(summaryMetrics, 'net_revenue', 'ad_spend', 'mer')},
   {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change', 'summary_orders_change', 'mer_change'),
     description: 'The selected dates against Compare with and Second comparison. Previous period follows the selection: one day compares with the same weekday a week earlier, a calendar month, quarter or year with the one before, other ranges with the days just before. Periods run from the first to the last selected date with summary rows; Change is the selected period divided by the comparison period, minus one.',
     metrics: pick(summaryMetrics, 'net_revenue', 'summary_orders', 'ad_spend', 'mer')},
@@ -277,6 +281,8 @@ export const columnTitles = {
 // compare2_<column> display like <column>; tests/formats.test.mjs requires every output
 // to be one of these or a dimension, so a new column cannot ship unformatted.
 export const outputFormats = {
+  // The readout's working values (foundation/sql/readout.sql).
+  selected_revenue: 'currency', selected_mer: 'ratio', previous_mer: 'ratio', revenue_move: 'number', spend_move: 'number',
   gross_revenue: 'currency', net_revenue: 'currency', new_revenue: 'currency', repeat_revenue: 'currency',
   net_revenue_per_summary_order: 'currency', net_revenue_per_order: 'currency', amount: 'currency', amount_difference: 'currency',
   gross: 'currency', net: 'currency', discounts: 'currency', refunds: 'currency', refund_amount: 'currency',
@@ -299,7 +305,7 @@ export const outputFormats = {
   ...Object.fromEntries(MONTHS.flatMap(m => [[`rate_month_${m}`, 'percent'], [`value_month_${m}`, 'currency']])),
 };
 /** Outputs that are labels, dates or identifiers rather than measures. */
-export const outputDimensions = ['date', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
+export const outputDimensions = ['readout', 'comparison_label', 'revenue_words', 'spend_words', 'efficiency_words', 'date', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
   'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
@@ -313,6 +319,10 @@ export const outputDimensions = ['date', 'day', 'period', 'period_start', 'first
 
 const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) =>
   ({key: `question:${key}`, row, col, size_x, size_y, tab, ...(clicks ? {clicks} : {})});
+// Filters that only shape one section show on its card rather than in the dashboard's bar,
+// as the App Starter puts section controls in their section's header. Scope filters (Date,
+// Store, Channel, the comparisons, Ad platform, names) stay in the bar.
+const withFilters = (card, ...filters) => ({...card, filters});
 
 /**
  * The dashboards. Each is installed on its own and as tabs of the combined foundation
@@ -320,20 +330,22 @@ const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) 
  * without hiding the others. `label` names its tab in the combined dashboard when it
  * has no tabs of its own. A card's `clicks` make a column clickable: it sets dashboard
  * filters from the clicked row, on this dashboard or on the one `dashboard` names (which
- * must come earlier in this list).
+ * must come earlier in this list). `withFilters` shows a card's own section filters on it;
+ * a filter cards on other tabs also read stays in the bar (src/foundation.mjs).
  */
 export function dashboards() {
   return [
     {key: 'dashboard:summary', name: 'SourceMedium executive summary',
       description: 'Summary-system KPIs, every sales channel by default, against Compare with and Second comparison. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
       tabs: ['Overview', 'Business review'], cards: [
-        layout('kpis', 0, 0, 8, 4, 0), layout('kpi_orders', 0, 8, 8, 4, 0), layout('kpi_spend', 0, 16, 8, 4, 0),
-        layout('kpi_mer', 4, 0, 8, 4, 0), layout('kpi_order_value', 4, 8, 8, 4, 0), layout('kpi_sessions', 4, 16, 8, 4, 0),
-        layout('comparison', 8, 0, 24, 5, 0), layout('trend', 13, 0, 24, 7, 0),
-        layout('trend_orders', 20, 0, 8, 5, 0), layout('trend_order_value', 20, 8, 8, 5, 0), layout('trend_spend', 20, 16, 8, 5, 0),
-        layout('trend_mer', 25, 0, 8, 5, 0), layout('trend_sessions', 25, 8, 8, 5, 0), layout('revenue_changes', 25, 16, 8, 5, 0),
-        layout('contributions', 30, 0, 24, 8, 0),
-        layout('deductions', 0, 0, 10, 7, 1), layout('purchase_mix', 0, 10, 14, 7, 1), layout('business', 7, 0, 24, 9, 1),
+        layout('readout', 0, 0, 24, 3, 0),
+        layout('kpis', 3, 0, 8, 4, 0), layout('kpi_orders', 3, 8, 8, 4, 0), layout('kpi_spend', 3, 16, 8, 4, 0),
+        layout('kpi_mer', 7, 0, 8, 4, 0), layout('kpi_order_value', 7, 8, 8, 4, 0), layout('kpi_sessions', 7, 16, 8, 4, 0),
+        layout('comparison', 11, 0, 24, 5, 0), withFilters(layout('trend', 16, 0, 24, 7, 0), 'trend_values'),
+        layout('trend_orders', 23, 0, 8, 5, 0), layout('trend_order_value', 23, 8, 8, 5, 0), layout('trend_spend', 23, 16, 8, 5, 0),
+        layout('trend_mer', 28, 0, 8, 5, 0), layout('trend_sessions', 28, 8, 8, 5, 0), layout('revenue_changes', 28, 16, 8, 5, 0),
+        layout('contributions', 33, 0, 24, 8, 0),
+        layout('deductions', 0, 0, 10, 7, 1), layout('purchase_mix', 0, 10, 14, 7, 1), withFilters(layout('business', 7, 0, 24, 9, 1), 'grain'),
         layout('store_context', 16, 0, 24, 4, 1)]},
     {key: 'dashboard:performance', label: 'Performance tables', name: 'SourceMedium performance tables',
       description: 'Summary and platform measures by Day, Week or Month (Period), with the selected period total last.',
@@ -344,17 +356,20 @@ export function dashboards() {
       tabs: [], cards: [layout('stores', 0, 0, 24, 8, null, [{column: 'store_name', dashboard: 'dashboard:summary', set: {store: 'store_id'}}])]},
     {key: 'dashboard:paid', label: 'Paid marketing', name: 'SourceMedium paid marketing',
       description: 'Platform-attributed economics by advertising platform (source_system), across all sales channels. Ad platform starts clear.',
-      tabs: [], cards: [layout('paid_channel', 0), layout('paid_trend', 6, 0, 24, 7), layout('paid_breakdown_chart', 13, 0, 12, 7),
+      tabs: [], cards: [layout('paid_channel', 0), withFilters(layout('paid_trend', 6, 0, 24, 7), 'paid_metric', 'grain'),
+        withFilters(layout('paid_breakdown_chart', 13, 0, 12, 7), 'breakdown'),
         layout('paid_breakdown', 13, 12, 12, 7), layout('paid_campaign', 20, 0, 24, 10, null, [{column: 'campaign_name', set: {campaign: 'campaign_name'}}])]},
     {key: 'dashboard:creatives', label: 'Creatives', name: 'SourceMedium creatives',
       description: 'Creative-level spend and platform-reported results across all sales channels. Ad platform starts clear.',
       tabs: [], cards: [layout('creatives', 0, 0, 24, 12)]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium products',
       description: 'Order-processed-date basis, valid orders: product totals and ranked products or variants against Compare with, with refund rates and cost coverage.',
-      tabs: [], cards: [layout('product_totals', 0, 0, 12, 4), layout('product_units', 0, 12, 12, 4), layout('product', 4, 0, 24, 9)]},
+      tabs: [], cards: [layout('product_totals', 0, 0, 12, 4), layout('product_units', 0, 12, 12, 4),
+        withFilters(layout('product', 4, 0, 24, 9), 'product_group', 'product_rank', 'product_ranking')]},
     {key: 'dashboard:retention', label: 'Retention', name: 'SourceMedium retention',
       description: 'Cohort curves and matrices at an explicit completed-month cutoff, optionally for one acquisition segment. Keep store/channel/cohort identities separate.',
-      tabs: [], cards: [layout('retention_curve', 0, 0, 12, 7), layout('retention_value_curve', 0, 12, 12, 7),
+      tabs: [], cards: [withFilters(layout('retention_curve', 0, 0, 12, 7), 'rate', 'cohorts'),
+        withFilters(layout('retention_value_curve', 0, 12, 12, 7), 'value'),
         layout('retention_matrix', 7, 0, 24, 7), layout('retention_value_matrix', 14, 0, 24, 7),
         layout('retention_segments', 21, 0, 24, 6, null, [{column: 'segment', set: {segment: 'segment'}}])]},
     {key: 'dashboard:geography', label: 'Geography', name: 'SourceMedium geography',
@@ -365,11 +380,13 @@ export function dashboards() {
         layout('geography_states', 21, 0, 12, 8), layout('geography_trend', 21, 12, 12, 8)]},
     {key: 'dashboard:orders', label: 'Orders', name: 'SourceMedium orders',
       description: 'The most recently processed orders in the selection, including orders SourceMedium does not count as valid. Select an order to see its details and attribution evidence.',
-      tabs: [], cards: [layout('orders', 0, 0, 24, 12, null, [{column: 'order_name', set: {order: 'order_key'}}]),
+      tabs: [], cards: [withFilters(layout('orders', 0, 0, 24, 12, null, [{column: 'order_name', set: {order: 'order_key'}}]),
+        'population', 'order_search'),
         layout('order_detail', 12, 0, 12, 10), layout('order_attribution', 12, 12, 12, 10)]},
     {key: 'dashboard:data', label: 'Data', name: 'SourceMedium data',
       description: 'Published source freshness, metric definitions and fields. Pipeline freshness, period completeness and quality checks are not published.',
-      tabs: [], cards: [layout('data_health', 0, 0, 24, 5), layout('metric_catalog', 5, 0, 24, 10), layout('field_dictionary', 15, 0, 24, 10)]},
+      tabs: [], cards: [layout('data_health', 0, 0, 24, 5), withFilters(layout('metric_catalog', 5, 0, 24, 10), 'metric_search'),
+        withFilters(layout('field_dictionary', 15, 0, 24, 10), 'source_table', 'field_search')]},
   ];
 }
 

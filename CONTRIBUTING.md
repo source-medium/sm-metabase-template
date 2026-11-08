@@ -45,7 +45,7 @@ H2 database keeps a dashboard's cards in creation order and hides storage-order
 differences. Also upgrade an install of the previous release, the path every
 existing customer takes. The installer refuses
 Metabase versions it has not been verified on (`src/snapshot.mjs`; currently
-v0.64.1 and v0.65.0-beta); widen that check only after this pass.
+v0.64.1 and v0.65.3); widen that check only after this pass.
 
 ## Screenshots and data
 

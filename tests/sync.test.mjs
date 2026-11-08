@@ -441,3 +441,36 @@ test('a question naming an unknown filter is refused instead of running unfilter
   const {filtersIn} = await import('../src/filters.mjs');
   assert.throws(() => filtersIn('WHERE {{stoer}}', options), /Unknown foundation filter \{\{stoer\}\}/);
 });
+
+test('section filters show on their cards, and a filter other tabs read stays in the bar', async () => {
+  const m = fakeMetabase();
+  const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const inline = (dashboardKey, questionKey) => {
+    const dashboard = m.dashboards.get(installed.ids[dashboardKey]);
+    const placement = dashboard.dashcards.find(c => c.card_id === installed.ids[`question:${questionKey}`]);
+    return [...(placement.inline_parameters ?? [])].sort();
+  };
+  assert.deepEqual(inline('dashboard:summary', 'trend'), ['trend_values']);
+  assert.deepEqual(inline('dashboard:summary', 'business'), ['grain']);
+  assert.deepEqual(inline('dashboard:paid', 'paid_trend'), ['grain', 'paid_metric']);
+  assert.deepEqual(inline('dashboard:product', 'product'), ['product_group', 'product_rank', 'product_ranking']);
+  assert.deepEqual(inline('dashboard:orders', 'orders'), ['order_search', 'population']);
+  assert.deepEqual(inline('dashboard:summary', 'kpis'), [], 'scope filters stay in the bar');
+  // Period drives cards on Business review, Performance tables and Paid marketing, so in the
+  // combined dashboard no single card may hold it.
+  assert.deepEqual(inline('dashboard:foundation', 'business'), []);
+  assert.deepEqual(inline('dashboard:foundation', 'paid_trend'), ['paid_metric']);
+  assert.deepEqual(inline('dashboard:foundation', 'trend'), ['trend_values']);
+  const combined = m.dashboards.get(installed.ids['dashboard:foundation']);
+  assert.ok(combined.parameters.some(p => p.id === 'grain'), 'a filter shown on a card is still the dashboard\'s');
+  const stable = await plan(m.api, definition);
+  assert.ok(stable.actions.every(a => a.action === 'unchanged'));
+});
+
+test('a card without inline filters reads as it did before they existed', () => {
+  const card = {card_id: 1, row: 0, col: 0, size_x: 4, size_y: 4, dashboard_tab_id: null, parameter_mappings: [], visualization_settings: {}};
+  const before = dashboardContent({name: 'd', dashcards: [card]});
+  assert.equal(digest(dashboardContent({name: 'd', dashcards: [{...card, inline_parameters: []}]})), digest(before));
+  assert.notEqual(digest(dashboardContent({name: 'd', dashcards: [{...card, inline_parameters: ['grain']}]})), digest(before));
+});

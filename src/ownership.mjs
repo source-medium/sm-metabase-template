@@ -95,7 +95,9 @@ export function dashboardContent(dashboard, {stored = false} = {}) {
   const dashcards = (dashboard.dashcards ?? []).map(c => ({card_id: c.card_id, row: c.row, col: c.col,
     size_x: c.size_x, size_y: c.size_y, dashboard_tab_id: c.dashboard_tab_id,
     parameter_mappings: stored ? c.parameter_mappings : [...(c.parameter_mappings ?? [])].sort(byFilter),
-    visualization_settings: c.visualization_settings ?? {}}));
+    visualization_settings: c.visualization_settings ?? {},
+    // A card with no inline filters reads as before they existed, so recorded contents still match.
+    ...(c.inline_parameters?.length ? {inline_parameters: [...c.inline_parameters].sort()} : {})}));
   const tabs = (dashboard.tabs ?? []).map(t => ({name: t.name, position: t.position}));
   return {name: dashboard.name, collection_id: dashboard.collection_id ?? null,
     description: prose(dashboard.description), parameters: dashboard.parameters,
