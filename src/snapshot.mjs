@@ -29,17 +29,32 @@ function reportUnmarked(definitions, state, home, cards, dashboards) {
 // Metabase rewrites a dashboard's stored content without a revision after the installer
 // records it (observed on the demo's Postgres application database), so the recorded
 // content can stop matching an untouched dashboard. Every edit through the UI or the API
-// leaves a revision. A dashboard whose newest revision is the installer's own ownership
-// stamp, setting exactly the description it carries now, has had no edit since that record:
-// it may be updated. Any later revision is an edit, and the plan keeps reporting a conflict.
-async function unrevisedSinceRecord(api, dashboard) {
+// leaves a revision of the fields it changed. A dashboard whose newest revision is the
+// installer's own ownership stamp (the installer's Metabase user setting the description it
+// carries now, and nothing else) has had no edit since that record: it may be updated. Any
+// other newest revision is an edit, including a customer's own description change, which
+// would otherwise mask the edits before it, and the plan keeps reporting a conflict. So
+// does a Metabase that will not serve the history.
+async function unrevisedSinceRecord(api, dashboard, installer) {
   const saved = marker(dashboard.description);
   if (!saved || saved.pending || dashboard.archived) return false;
   const readings = [dashboardContent(dashboard), ...recordedDashboardContents(dashboard)];
   if (readings.some(c => digest(c) === saved.content)) return false;
-  const revisions = await api('GET', `/api/revision?entity=dashboard&id=${dashboard.id}`);
+  let revisions;
+  try { revisions = await api('GET', `/api/revision?entity=dashboard&id=${dashboard.id}`); } catch { return false; }
   const newest = [...(Array.isArray(revisions) ? revisions : [])].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
-  return newest?.diff?.after?.description === dashboard.description;
+  const after = newest?.diff?.after ?? {};
+  const keys = Object.keys(after);
+  return keys.length === 1 && keys[0] === 'description' &&
+    after.description === dashboard.description && newest.user?.id === installer;
+}
+
+// The installer's own Metabase user, read once for every dashboard the plan compares.
+async function markUnrevised(api, owned, installer) {
+  const dashboards = [...owned.values()].filter(object => object._kind === 'dashboard');
+  if (!dashboards.length) return;
+  const user = installer ?? (await api('GET', '/api/user/current')).id;
+  for (const dashboard of dashboards) dashboard._unrevised = await unrevisedSinceRecord(api, dashboard, user);
 }
 
 // Versions verified end to end on the demo warehouse (install, upgrade, unchanged second
@@ -104,7 +119,7 @@ export async function snapshot(api, options, definitions = []) {
       }
     }
   }
-  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
+  await markUnrevised(api, owned);
   return {scope, owned, duplicate, unmarked, collectionId: managedCollection?.id};
 }
 
@@ -152,8 +167,10 @@ async function recordedSnapshot(api, options, definitions, scope, all) {
     throw new Error('The ownership map records content but not its collection. No content was changed.');
   }
   const recovered = {};
+  // The installer's own user: which unrecorded objects it created, and whose dashboard
+  // revisions are its own ownership stamp.
+  const {id: creator} = await api('GET', '/api/user/current');
   if (unrecorded.length) {
-    const {id: creator} = await api('GET', '/api/user/current');
     const claims = (objects, key) => objects.filter(o => marker(o.description)?.scope === scope && marker(o.description).key === key);
     for (const node of unrecorded) {
       const home = owned.get('collection:foundation');
@@ -177,7 +194,7 @@ async function recordedSnapshot(api, options, definitions, scope, all) {
     const home = owned.get('collection:foundation');
     if (home) reportUnmarked(definitions, {scope, owned, unmarked}, home, all.cards, all.dashboards);
   }
-  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
+  await markUnrevised(api, owned, creator);
   const ownership = Object.keys(recovered).length ? {...map, revision: map.revision + 1, objects: {...map.objects, ...recovered}} : map;
   return {scope, owned, duplicate: new Set(), unmarked, collectionId: owned.get('collection:foundation')?.id, ownership, recovered: Object.keys(recovered)};
 }

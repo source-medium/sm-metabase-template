@@ -41,6 +41,10 @@ const PROCESSED = 'order_processed_at_local_datetime';
 const scalar = column => ({'scalar.field': column, 'scalar.comparisons': [
   {id: 'compare', type: 'anotherColumn', column: `compare_${column}`, label: 'comparison'},
   {id: 'compare2', type: 'anotherColumn', column: `compare2_${column}`, label: 'second comparison'}]});
+// A number card with no comparison, for a measure whose rise is neither good nor bad.
+// Metabase colors a comparison green when it rose and red when it fell, and has no neutral
+// color, so the measure shows its value alone, as the App Starter leaves it uncolored.
+const neutralScalar = column => ({'scalar.field': column});
 // A daily line with the Compare with period dashed beside it, day for day.
 const trendLine = (column, title) => ({'graph.dimensions': ['date'], 'graph.metrics': [column, `compare_${column}`],
   'graph.x_axis.title_text': 'Date', 'graph.y_axis.title_text': title,
@@ -91,7 +95,7 @@ export const questions = [
     metrics: {...summaryMetrics, sessions: 'website_sessions_summary'},
     variants: [
       {key: 'kpi_orders', name: 'Orders', display: 'smartscalar', settings: scalar('summary_orders')},
-      {key: 'kpi_spend', name: 'Ad spend', display: 'smartscalar', settings: scalar('ad_spend')},
+      {key: 'kpi_spend', name: 'Ad spend', display: 'scalar', settings: neutralScalar('ad_spend')},
       {key: 'kpi_mer', name: 'Marketing efficiency (MER)', display: 'smartscalar', settings: scalar('mer')},
       {key: 'kpi_order_value', name: 'Revenue per order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
       {key: 'kpi_sessions', name: 'Website sessions', display: 'smartscalar', settings: scalar('sessions')}]},

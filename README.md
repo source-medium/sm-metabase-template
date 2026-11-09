@@ -72,7 +72,7 @@ day and the same period last year otherwise. In tables, a change is green when
 it rose and red when it fell for measures where more is better; ad spend,
 deductions and product rankings stay uncolored, because a rise there is neither
 good nor bad on its own. Metabase number cards have no neutral color, so the Ad
-spend card keeps Metabase's green for a rise. Unlike the App Starter, the
+spend card shows its value without a comparison. Unlike the App Starter, the
 dates are the first and last days with data in the selection, a period to date
 ends within the last two days rather than exactly yesterday, and a calendar
 week compares as any other range. A card whose source your warehouse does not

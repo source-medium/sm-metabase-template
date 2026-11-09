@@ -107,7 +107,8 @@ export function fakeMetabase() {
   let reads = 0;
   // The user the API key acts as: 1 is the installer's; a test acts as a customer to copy content.
   let user = 1;
-  // Like Metabase, every dashboard write through the API leaves a revision of the fields it set.
+  // Like Metabase, every dashboard write through the API leaves a revision, whose diff holds
+  // only the fields that write changed.
   const revisions = new Map();
   let clock = 0;
   async function api(method, path, body) {
@@ -142,6 +143,7 @@ export function fakeMetabase() {
       return read(store.get(id));
     }
     const actual = id || ++sequence;
+    const previous = store.get(actual);
     // Like Metabase v0.64.1, keep the server's own entity ID and ignore a client's.
     const object = {...store.get(actual), ...structuredClone(body), id: actual, entity_id: store.get(actual)?.entity_id ?? `fake-entity-${actual}`};
     // Collections have no creator.
@@ -160,8 +162,18 @@ export function fakeMetabase() {
         dashboard_tab_id: tabIds.get(c.dashboard_tab_id) ?? c.dashboard_tab_id}));
     }
     store.set(actual, object);
-    if (kind === 'dashboard') revisions.set(actual, [...(revisions.get(actual) || []),
-      {timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user}, diff: {before: null, after: structuredClone(body)}}]);
+    if (kind === 'dashboard') {
+      // Metabase's diff names only the fields this write changed, and a write that changes
+      // nothing leaves no revision. So the installer's ownership stamp, which sets the
+      // description alone, reads differently from an edit to the dashboard's content.
+      const changed = Object.keys(body || {}).filter(k => JSON.stringify(previous?.[k]) !== JSON.stringify(object[k]));
+      if (changed.length) {
+        revisions.set(actual, [...(revisions.get(actual) || []), {
+          timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user},
+          diff: {before: Object.fromEntries(changed.map(k => [k, structuredClone(previous?.[k] ?? null)])),
+            after: Object.fromEntries(changed.map(k => [k, structuredClone(object[k])]))}}]);
+      }
+    }
     return structuredClone(object);
   }
   return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;},

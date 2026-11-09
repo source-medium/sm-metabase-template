@@ -28,7 +28,15 @@ test('comparison numbers use their own value for the empty state and preserve sh
     assert.equal(card.visualization_settings['scalar.field'], column);
     assert.ok(card.dataset_query.native.query.endsWith(`WHERE number_card.\`${column}\` IS NOT NULL\n`));
     assert.equal(card.dataset_query.native['template-tags'].store.required, true);
-    assert.equal(card.visualization_settings['scalar.comparisons'][0].column, `compare_${column}`);
+    if (key === 'kpi_spend') {
+      // A rise in ad spend is neither good nor bad, and Metabase colors every comparison,
+      // so this card carries none: the value alone, as the App Starter shows it.
+      assert.equal(card.display, 'scalar');
+      assert.equal(card.visualization_settings['scalar.comparisons'], undefined);
+    } else {
+      assert.equal(card.display, 'smartscalar');
+      assert.equal(card.visualization_settings['scalar.comparisons'][0].column, `compare_${column}`);
+    }
   }
   const revenue = m.cards.get(installed.ids['question:kpis']);
   assert.match(revenue.dataset_query.native.query, /SAFE_DIVIDE\(\{\{snippet: SM /);
@@ -495,4 +503,44 @@ test('a dashboard Metabase rewrote without a revision updates; one edited throug
   assert.equal(action('dashboard:paid').action, 'conflict', 'an edit is never overwritten');
   await applyPlan(m.api, definition, options, next).catch(() => {});
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:summary').action, 'unchanged');
+});
+
+test('only the installer\'s own description-only revision clears a rewritten dashboard\'s conflict', async () => {
+  const m = fakeMetabase();
+  const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  // Metabase rewrites each one's stored content on its own, leaving no revision. What
+  // separates them is their newest revision.
+  const rewritten = key => {
+    const id = installed.ids[key];
+    m.rewriteSilently(id, d => ({...d, dashcards: d.dashcards.map((c, i) => i === 0 ?
+      {...c, visualization_settings: {...c.visualization_settings, 'card.title': null}} : c)}));
+    return id;
+  };
+  const stamped = rewritten('dashboard:summary');
+  const described = rewritten('dashboard:paid');
+  const movedAndDescribed = rewritten('dashboard:product');
+  const unreadable = rewritten('dashboard:geography');
+  m.actAs(2);
+  // A customer rewords the description, keeping the ownership line: on its own that
+  // revision must not mask the card this customer moved first.
+  const moved = structuredClone(m.dashboards.get(described));
+  await m.api('PUT', `/api/dashboard/${described}`, {dashcards: moved.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
+  await m.api('PUT', `/api/dashboard/${described}`, {description: `Ours now. ${m.dashboards.get(described).description}`});
+  m.actAs(1);
+  // One write that moves a card and changes the description is still an edit, even from the
+  // account the installer's API key acts as: a customer admin can edit in the UI as itself.
+  const both = structuredClone(m.dashboards.get(movedAndDescribed));
+  await m.api('PUT', `/api/dashboard/${movedAndDescribed}`, {description: `Ours too. ${both.description}`,
+    dashcards: both.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
+  // A Metabase that will not serve one dashboard's history keeps that conflict and plans.
+  m.failWhen((method, path) => path.startsWith('/api/revision') && path.endsWith(`id=${unreadable}`));
+  const next = await plan(m.api, definition);
+  const action = key => next.actions.find(a => a.key === key);
+  assert.equal(action('dashboard:summary').action, 'update');
+  assert.match(action('dashboard:summary').reason, /Not edited since its last install/);
+  assert.equal(stamped, installed.ids['dashboard:summary']);
+  assert.equal(action('dashboard:paid').action, 'conflict', 'a description someone else wrote hides the edits before it');
+  assert.equal(action('dashboard:product').action, 'conflict', 'a revision that also moved a card is an edit');
+  assert.equal(action('dashboard:geography').action, 'conflict', 'an unreadable history keeps the conflict');
 });
