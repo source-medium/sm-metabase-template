@@ -107,8 +107,13 @@ export function fakeMetabase() {
   let reads = 0;
   // The user the API key acts as: 1 is the installer's; a test acts as a customer to copy content.
   let user = 1;
-  // Like Metabase, every dashboard write through the API leaves a revision of the fields it set.
+  // Like Metabase, every dashboard write through the API leaves a revision, whose diff holds
+  // only the fields that write changed, and a write that changes nothing leaves none
+  // (`push-revision!` compares the serialized dashboard with the last revision's).
+  // `revision.id` is one auto-increment sequence for every object, so it is numbered here
+  // across dashboards.
   const revisions = new Map();
+  let revision = 0;
   let clock = 0;
   async function api(method, path, body) {
     calls.push({method, path, body: structuredClone(body)});
@@ -142,6 +147,7 @@ export function fakeMetabase() {
       return read(store.get(id));
     }
     const actual = id || ++sequence;
+    const previous = store.get(actual);
     // Like Metabase v0.64.1, keep the server's own entity ID and ignore a client's.
     const object = {...store.get(actual), ...structuredClone(body), id: actual, entity_id: store.get(actual)?.entity_id ?? `fake-entity-${actual}`};
     // Collections have no creator.
@@ -160,8 +166,21 @@ export function fakeMetabase() {
         dashboard_tab_id: tabIds.get(c.dashboard_tab_id) ?? c.dashboard_tab_id}));
     }
     store.set(actual, object);
-    if (kind === 'dashboard') revisions.set(actual, [...(revisions.get(actual) || []),
-      {timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user}, diff: {before: null, after: structuredClone(body)}}]);
+    if (kind === 'dashboard') {
+      // Metabase's diff names only the fields this write changed, and a write that changes
+      // nothing leaves no revision. Metabase serializes a dashboard's placements under
+      // `cards`, not `dashcards` (metabase/revisions/impl/dashboard.clj), so nothing may
+      // read the installer's own writes out of a diff's shape.
+      const changed = Object.keys(body || {}).filter(k => JSON.stringify(previous?.[k]) !== JSON.stringify(object[k]));
+      const serialized = key => key === 'dashcards' ? 'cards' : key;
+      if (changed.length) {
+        // Metabase keeps each object's newest 15 revisions and deletes the rest.
+        revisions.set(actual, [...(revisions.get(actual) || []), {
+          id: ++revision, timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user},
+          diff: {before: Object.fromEntries(changed.map(k => [serialized(k), structuredClone(previous?.[k] ?? null)])),
+            after: Object.fromEntries(changed.map(k => [serialized(k), structuredClone(object[k])]))}}].slice(-15));
+      }
+    }
     return structuredClone(object);
   }
   return {api, cards, dashboards, collections, dimensions, snippets, calls, failWhen: fn => {fail = fn;}, reorderDashcards: on => {reorder = on;},

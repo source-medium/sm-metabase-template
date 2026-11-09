@@ -26,20 +26,59 @@ function reportUnmarked(definitions, state, home, cards, dashboards) {
   }
 }
 
+// Metabase's revision history, newest first, as Metabase itself orders it.
+const newestFirst = revisions => [...(Array.isArray(revisions) ? revisions : [])]
+  .sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)) || (b.id ?? 0) - (a.id ?? 0));
+
+// The revision a dashboard is on now, for apply to record. null when Metabase serves no
+// usable history: the record then carries no revision and the next plan says so.
+export async function newestRevision(api, id) {
+  let revisions;
+  try { revisions = await api('GET', `/api/revision?entity=dashboard&id=${id}`); } catch { return null; }
+  const [newest] = newestFirst(revisions);
+  return Number.isSafeInteger(newest?.id) ? newest.id : null;
+}
+
 // Metabase rewrites a dashboard's stored content without a revision after the installer
-// records it (observed on the demo's Postgres application database), so the recorded
-// content can stop matching an untouched dashboard. Every edit through the UI or the API
-// leaves a revision. A dashboard whose newest revision is the installer's own ownership
-// stamp, setting exactly the description it carries now, has had no edit since that record:
-// it may be updated. Any later revision is an edit, and the plan keeps reporting a conflict.
-async function unrevisedSinceRecord(api, dashboard) {
+// records it (observed on the demo's Postgres application database), so the recorded content
+// can stop matching an untouched dashboard. What the record can still name is where the
+// dashboard sat in Metabase's revision history: every write that changes the stored dashboard
+// leaves a revision, and one that changes nothing leaves none. Apply records the revision its
+// content writes left, and its own ownership stamp leaves exactly one more, which it cannot
+// name because the write creates it. So a dashboard still on the recorded revision, or one
+// revision past it, has had no edit since that record and may be updated. That asks nothing
+// about who wrote a revision (the account the API key acts as changes with a key rotation or
+// a new operator, and the previous install's account is gone) or what its diff holds
+// (Metabase's serialized dashboard names `cards`, not `dashcards`).
+//
+// Anything else is an edit, including a customer's own description change, which would
+// otherwise mask the edits before it, and the plan keeps reporting a conflict. So does a
+// record from a template that did not record revisions ('unrecorded') and a Metabase that
+// will not serve the history ('unavailable'): neither rules an edit out, and each says so in
+// its own reason. An 'unrecorded' dashboard is not stuck: every apply that writes a dashboard
+// records its revision, so the first refresh after this template heals each one whose content
+// still matches its record or its definition, which is every dashboard but the already
+// ambiguous ones.
+const INSTALLER_TRAILING_WRITES = 1;
+async function revisionVerdict(api, dashboard) {
   const saved = marker(dashboard.description);
-  if (!saved || saved.pending || dashboard.archived) return false;
+  if (!saved || saved.pending || dashboard.archived) return null;
   const readings = [dashboardContent(dashboard), ...recordedDashboardContents(dashboard)];
-  if (readings.some(c => digest(c) === saved.content)) return false;
-  const revisions = await api('GET', `/api/revision?entity=dashboard&id=${dashboard.id}`);
-  const newest = [...(Array.isArray(revisions) ? revisions : [])].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)))[0];
-  return newest?.diff?.after?.description === dashboard.description;
+  if (readings.some(c => digest(c) === saved.content)) return null;
+  if (!Number.isSafeInteger(saved.revision)) return 'unrecorded';
+  let revisions;
+  try { revisions = await api('GET', `/api/revision?entity=dashboard&id=${dashboard.id}`); } catch { return 'unavailable'; }
+  // Metabase keeps each object's newest 15 revisions, so a record that has dropped out of
+  // the history sits behind at least that many writes: an edit.
+  const position = newestFirst(revisions).findIndex(r => r.id === saved.revision);
+  return position >= 0 && position <= INSTALLER_TRAILING_WRITES ? 'unedited' : 'edited';
+}
+
+// Where every managed dashboard the plan compares sits in Metabase's revision history.
+async function markRevisions(api, owned) {
+  for (const dashboard of [...owned.values()].filter(object => object._kind === 'dashboard')) {
+    dashboard._revision = await revisionVerdict(api, dashboard);
+  }
 }
 
 // Versions verified end to end on the demo warehouse (install, upgrade, unchanged second
@@ -104,7 +143,7 @@ export async function snapshot(api, options, definitions = []) {
       }
     }
   }
-  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
+  await markRevisions(api, owned);
   return {scope, owned, duplicate, unmarked, collectionId: managedCollection?.id};
 }
 
@@ -152,8 +191,9 @@ async function recordedSnapshot(api, options, definitions, scope, all) {
     throw new Error('The ownership map records content but not its collection. No content was changed.');
   }
   const recovered = {};
+  // The installer's own user: which unrecorded objects it created.
+  const {id: creator} = await api('GET', '/api/user/current');
   if (unrecorded.length) {
-    const {id: creator} = await api('GET', '/api/user/current');
     const claims = (objects, key) => objects.filter(o => marker(o.description)?.scope === scope && marker(o.description).key === key);
     for (const node of unrecorded) {
       const home = owned.get('collection:foundation');
@@ -177,7 +217,7 @@ async function recordedSnapshot(api, options, definitions, scope, all) {
     const home = owned.get('collection:foundation');
     if (home) reportUnmarked(definitions, {scope, owned, unmarked}, home, all.cards, all.dashboards);
   }
-  for (const object of owned.values()) if (object._kind === 'dashboard') object._unrevised = await unrevisedSinceRecord(api, object);
+  await markRevisions(api, owned);
   const ownership = Object.keys(recovered).length ? {...map, revision: map.revision + 1, objects: {...map.objects, ...recovered}} : map;
   return {scope, owned, duplicate: new Set(), unmarked, collectionId: owned.get('collection:foundation')?.id, ownership, recovered: Object.keys(recovered)};
 }
@@ -224,6 +264,13 @@ export const collectionDefinition = options => ({key: 'collection:foundation', k
   name: 'SourceMedium foundation', parent_id: options.collection,
   description: 'Customer-owned SourceMedium dashboards, models and catalog-derived metrics. Refresh definitions with the SourceMedium adapter; add custom content separately.'})});
 
+// A dashboard whose stored content stopped matching its record, where no revision rules an
+// edit out. Both stay conflicts, told apart from a real edit for whoever reviews the plan.
+const REVISION_CONFLICTS = {
+  unrecorded: 'Installed before the installer recorded dashboard revisions, so a Metabase rewrite cannot be told from an edit; preserved. The next apply that updates it records one.',
+  unavailable: 'Metabase did not serve this dashboard\'s revision history, so no edit can be ruled out; preserved.',
+};
+
 export function makePlan(definition, state, options) {
   const nodes = [collectionDefinition(options), ...definition.nodes];
   const ids = new Map([...state.owned].map(([key, value]) => [key, value.id]));
@@ -237,8 +284,10 @@ export function makePlan(definition, state, options) {
     if (result.action === 'conflict' && node.kind === 'dashboard' && !existing.archived && marker(existing.description) &&
         !marker(existing.description).pending && matchesDefinition(existing, target, state)) {
       result = {action: 'update', reason: 'Content matches the definition; its ownership record is refreshed.'};
-    } else if (result.action === 'conflict' && node.kind === 'dashboard' && existing?._unrevised) {
-      result = {action: 'update', reason: 'Not edited since its last install (its newest revision is the installer\'s record); Metabase rewrote its stored content.'};
+    } else if (result.action === 'conflict' && node.kind === 'dashboard' && existing?._revision === 'unedited') {
+      result = {action: 'update', reason: 'Not edited since its last install (it is still on the revision the installer recorded); Metabase rewrote its stored content.'};
+    } else if (result.action === 'conflict' && node.kind === 'dashboard' && REVISION_CONFLICTS[existing?._revision]) {
+      result = {action: 'conflict', reason: REVISION_CONFLICTS[existing._revision]};
     }
     if (existing && !existing.archived && marker(existing.description)?.pending) {
       const current = existing._kind === 'card' ? cardContent(existing) : ['collection', 'snippet'].includes(existing._kind) ? contentOf(existing) :
