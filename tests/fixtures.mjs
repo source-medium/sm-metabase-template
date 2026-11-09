@@ -108,8 +108,12 @@ export function fakeMetabase() {
   // The user the API key acts as: 1 is the installer's; a test acts as a customer to copy content.
   let user = 1;
   // Like Metabase, every dashboard write through the API leaves a revision, whose diff holds
-  // only the fields that write changed.
+  // only the fields that write changed, and a write that changes nothing leaves none
+  // (`push-revision!` compares the serialized dashboard with the last revision's).
+  // `revision.id` is one auto-increment sequence for every object, so it is numbered here
+  // across dashboards.
   const revisions = new Map();
+  let revision = 0;
   let clock = 0;
   async function api(method, path, body) {
     calls.push({method, path, body: structuredClone(body)});
@@ -164,14 +168,17 @@ export function fakeMetabase() {
     store.set(actual, object);
     if (kind === 'dashboard') {
       // Metabase's diff names only the fields this write changed, and a write that changes
-      // nothing leaves no revision. So the installer's ownership stamp, which sets the
-      // description alone, reads differently from an edit to the dashboard's content.
+      // nothing leaves no revision. Metabase serializes a dashboard's placements under
+      // `cards`, not `dashcards` (metabase/revisions/impl/dashboard.clj), so nothing may
+      // read the installer's own writes out of a diff's shape.
       const changed = Object.keys(body || {}).filter(k => JSON.stringify(previous?.[k]) !== JSON.stringify(object[k]));
+      const serialized = key => key === 'dashcards' ? 'cards' : key;
       if (changed.length) {
+        // Metabase keeps each object's newest 15 revisions and deletes the rest.
         revisions.set(actual, [...(revisions.get(actual) || []), {
-          timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user},
-          diff: {before: Object.fromEntries(changed.map(k => [k, structuredClone(previous?.[k] ?? null)])),
-            after: Object.fromEntries(changed.map(k => [k, structuredClone(object[k])]))}}]);
+          id: ++revision, timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, ++clock)).toISOString(), user: {id: user},
+          diff: {before: Object.fromEntries(changed.map(k => [serialized(k), structuredClone(previous?.[k] ?? null)])),
+            after: Object.fromEntries(changed.map(k => [serialized(k), structuredClone(object[k])]))}}].slice(-15));
       }
     }
     return structuredClone(object);

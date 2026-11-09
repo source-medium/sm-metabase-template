@@ -1,5 +1,5 @@
 import {digest, definitionSource, stamp, cardContent, recordIds} from './ownership.mjs';
-import {snapshot, makePlan, contentOf, collectionDefinition, mappings, readObject} from './snapshot.mjs';
+import {snapshot, makePlan, contentOf, collectionDefinition, mappings, newestRevision, readObject} from './snapshot.mjs';
 
 async function curate(api, id, names) {
   const path = `/api/metric/${id}/dimension`;
@@ -77,7 +77,13 @@ export async function applyPlan(api, definition, options, reviewed, {notify = ()
       if (existing) await api('PUT', `/api/dashboard/${object.id}`, initial);
       await layoutDashboard(api, object, node, ids, cards, collectionId, initial.description);
       object = {...await api('GET', `/api/dashboard/${object.id}`), _kind: 'dashboard'};
-      await api('PUT', `/api/dashboard/${object.id}`, {description: stamp(node.layout.description, {...pending, pending: false, content: digest(contentOf(object))})});
+      // The revision the writes above left. Metabase can rewrite a dashboard's stored content
+      // on its own without one, so the next plan tells its rewrite from an edit by this
+      // revision rather than by the content (snapshot.mjs). The stamp below leaves one more
+      // revision, which it cannot name; the plan allows for that one write.
+      const revision = await newestRevision(api, object.id);
+      const record = {...pending, pending: false, content: digest(contentOf(object)), ...(revision === null ? {} : {revision})};
+      await api('PUT', `/api/dashboard/${object.id}`, {description: stamp(node.layout.description, record)});
     } else {
       object = await api(existing ? 'PUT' : 'POST', `/api/collection${existing ? '/' + existing.id : ''}`,
         {...body, description: stamp(body.description, pending)});

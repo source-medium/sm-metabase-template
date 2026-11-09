@@ -505,42 +505,92 @@ test('a dashboard Metabase rewrote without a revision updates; one edited throug
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:summary').action, 'unchanged');
 });
 
-test('only the installer\'s own description-only revision clears a rewritten dashboard\'s conflict', async () => {
+test('the recorded revision, not who wrote one, clears a rewritten dashboard\'s conflict', async () => {
   const m = fakeMetabase();
   const definition = full();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   // Metabase rewrites each one's stored content on its own, leaving no revision. What
-  // separates them is their newest revision.
+  // separates them is the revision the installer recorded.
   const rewritten = key => {
     const id = installed.ids[key];
     m.rewriteSilently(id, d => ({...d, dashcards: d.dashcards.map((c, i) => i === 0 ?
       {...c, visualization_settings: {...c.visualization_settings, 'card.title': null}} : c)}));
     return id;
   };
-  const stamped = rewritten('dashboard:summary');
+  const recorded = rewritten('dashboard:summary');
   const described = rewritten('dashboard:paid');
-  const movedAndDescribed = rewritten('dashboard:product');
+  const movedThenDescribed = rewritten('dashboard:product');
   const unreadable = rewritten('dashboard:geography');
+  const unrecorded = rewritten('dashboard:retention');
+  // An install from a template that recorded no revision: its record cannot rule an edit out.
+  const older = m.dashboards.get(unrecorded);
+  const {revision: _dropped, ...withoutRevision} = marker(older.description);
+  older.description = stamp(older.description, withoutRevision);
+  // A customer rewords the description from its own account, keeping the ownership line: on
+  // its own that revision must not mask the card this customer moved first.
   m.actAs(2);
-  // A customer rewords the description, keeping the ownership line: on its own that
-  // revision must not mask the card this customer moved first.
   const moved = structuredClone(m.dashboards.get(described));
   await m.api('PUT', `/api/dashboard/${described}`, {dashcards: moved.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
   await m.api('PUT', `/api/dashboard/${described}`, {description: `Ours now. ${m.dashboards.get(described).description}`});
+  // The same two edits from the account the installer's API key acts as: the documented
+  // customer-hosted setup is a customer admin's own key, and a description written last must
+  // not mask the card move before it.
   m.actAs(1);
-  // One write that moves a card and changes the description is still an edit, even from the
-  // account the installer's API key acts as: a customer admin can edit in the UI as itself.
-  const both = structuredClone(m.dashboards.get(movedAndDescribed));
-  await m.api('PUT', `/api/dashboard/${movedAndDescribed}`, {description: `Ours too. ${both.description}`,
-    dashcards: both.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
+  const own = structuredClone(m.dashboards.get(movedThenDescribed));
+  await m.api('PUT', `/api/dashboard/${movedThenDescribed}`, {dashcards: own.dashcards.map((c, i) => i === 0 ? {...c, size_y: c.size_y + 1} : c)});
+  await m.api('PUT', `/api/dashboard/${movedThenDescribed}`, {description: `Ours too. ${m.dashboards.get(movedThenDescribed).description}`});
   // A Metabase that will not serve one dashboard's history keeps that conflict and plans.
   m.failWhen((method, path) => path.startsWith('/api/revision') && path.endsWith(`id=${unreadable}`));
   const next = await plan(m.api, definition);
   const action = key => next.actions.find(a => a.key === key);
   assert.equal(action('dashboard:summary').action, 'update');
   assert.match(action('dashboard:summary').reason, /Not edited since its last install/);
-  assert.equal(stamped, installed.ids['dashboard:summary']);
+  assert.equal(recorded, installed.ids['dashboard:summary']);
   assert.equal(action('dashboard:paid').action, 'conflict', 'a description someone else wrote hides the edits before it');
-  assert.equal(action('dashboard:product').action, 'conflict', 'a revision that also moved a card is an edit');
+  assert.equal(action('dashboard:product').action, 'conflict', 'a card move then a description edit from the installer\'s own account is an edit');
   assert.equal(action('dashboard:geography').action, 'conflict', 'an unreadable history keeps the conflict');
+  assert.match(action('dashboard:geography').reason, /did not serve/);
+  assert.equal(action('dashboard:retention').action, 'conflict', 'a record with no revision cannot rule an edit out');
+  assert.match(action('dashboard:retention').reason, /recorded dashboard revisions/);
+});
+
+test('a rewritten dashboard stays unedited when the API key acts as another account', async () => {
+  const m = fakeMetabase();
+  const definition = full();
+  // Installed by one account: a service account, a previous operator, or a key since rotated.
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const summary = installed.ids['dashboard:summary'];
+  m.rewriteSilently(summary, d => ({...d, dashcards: d.dashcards.map((c, i) => i === 0 ?
+    {...c, visualization_settings: {...c.visualization_settings, 'card.title': null}} : c)}));
+  // The key now acts as somebody else. Nothing about the dashboard changed, so neither does
+  // the plan: an ownership record names a revision, not the account that wrote it.
+  m.actAs(2);
+  const next = await plan(m.api, definition);
+  const action = next.actions.find(a => a.key === 'dashboard:summary');
+  assert.equal(action.action, 'update');
+  assert.match(action.reason, /Not edited since its last install/);
+  await applyPlan(m.api, definition, options, next);
+  assert.ok((await plan(m.api, definition)).actions.every(a => a.action === 'unchanged'));
+  assert.ok(!m.calls.some(c => c.path === '/api/user/current'), 'the plan no longer reads the installer\'s identity');
+});
+
+test('a record from a template that recorded no revision heals on the next apply', async () => {
+  const m = fakeMetabase();
+  const initial = define();
+  const installed = await applyPlan(m.api, initial, options, await plan(m.api, initial));
+  const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
+  assert.ok(Number.isSafeInteger(marker(dashboard.description).revision), 'apply records the revision');
+  const {revision: _dropped, ...withoutRevision} = marker(dashboard.description);
+  dashboard.description = stamp(dashboard.description, withoutRevision);
+  // Nothing consults revisions while the content still matches its record, so the older
+  // install plans as it always did, and the upgrade that writes it records a revision.
+  assert.ok((await plan(m.api, initial)).actions.every(a => a.action === 'unchanged'));
+  const expanded = full();
+  const upgrade = await plan(m.api, expanded);
+  assert.equal(upgrade.actions.find(a => a.key === 'dashboard:foundation').action, 'update');
+  await applyPlan(m.api, expanded, options, upgrade);
+  for (const key of Object.keys(installed.ids).filter(k => k.startsWith('dashboard:'))) {
+    assert.ok(Number.isSafeInteger(marker(m.dashboards.get(installed.ids[key]).description).revision), key);
+  }
+  assert.ok((await plan(m.api, expanded)).actions.every(a => a.action === 'unchanged'));
 });

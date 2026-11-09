@@ -49,7 +49,7 @@ delivers its tables, so a missing source never hides the others.
 
 | Tab | Questions | Source |
 | --- | --- | --- |
-| Overview | A one-sentence readout of what moved; net revenue, orders, ad spend, MER, revenue per order and sessions against two comparison periods; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel and sub-channel contributions | `rpt_executive_summary_daily` |
+| Overview | A one-sentence readout of what moved; net revenue, orders, MER, revenue per order and sessions against two comparison periods, and ad spend as a value without one; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel and sub-channel contributions | `rpt_executive_summary_daily` |
 | Business review | Revenue and deductions and new vs repeat purchases against the comparison, a business summary by day, week or month, and each store's currency, time zone and latest data date | `rpt_executive_summary_daily`, `dim_stores` |
 | Performance tables | Revenue and orders, marketing efficiency, and new and repeat purchases by day, week or month, plus ad platform delivery and results by period (CPM, CPC, conversion rate) | `rpt_executive_summary_daily`, `rpt_ad_performance_daily` |
 | All stores | One row per store with revenue change and latest data date, never a cross-store total; a store name opens its executive summary | `rpt_executive_summary_daily`, `dim_stores` |
@@ -190,9 +190,13 @@ install.
   **SourceMedium foundation** collection, marked with an `SM_METABASE_V1`
   ownership line. A question you edit there is reported as a conflict, never
   overwritten; the installer never deletes content or adopts yours by name.
-  Metabase can rewrite a dashboard's stored content on its own; a dashboard
-  whose newest revision is still the installer's record has had no edit and is
-  updated, while any edit leaves a revision and is preserved.
+  Metabase can rewrite a dashboard's stored content on its own, so each apply
+  records the Metabase revision the dashboard is left on: one still on that
+  revision has had no edit and is updated, while an edit leaves a later revision
+  and is preserved. The record names a revision, not an account, so rotating the
+  API key or installing as another user changes nothing. A dashboard installed
+  before this template recorded revisions is preserved for review instead, and
+  the next apply that updates it records one.
 - **Undo** by archiving the SourceMedium foundation collection and its
   `SM ...` SQL snippets. Warehouse access is unaffected.
 
