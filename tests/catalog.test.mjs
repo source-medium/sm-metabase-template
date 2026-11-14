@@ -130,6 +130,52 @@ test('a column-list filter compiles to a conditional sum in metrics, snippets an
   }
 });
 
+// reporting_queries #2631 (2026-11-13) priced the per-click ratios on rows that report
+// delivery. Refused, they left the hosted dashboards' plan as retained objects and every
+// verify failed with TEMPLATE_PLAN_CHANGED.
+const delivery = '(ad_impressions is not null or ad_clicks is not null)';
+const deliveryRatio = (name, a, b, extra = {}) => simple(name, `${a} / ${b}`, {underlying_model: adTable.name, metric_type: 'ratio',
+  dependent_metrics: `${a}, ${b}`, has_filter: true, filter_condition: delivery, ...extra});
+
+test('a reported-delivery filter compiles a ratio to conditional sums in metrics, snippets and dashboards', () => {
+  const all = [...tables, adTable];
+  const catalog = compileCatalog([...rows, ...paidRows, deliveryRatio('cost_per_click', 'total_ad_spend', 'total_ad_clicks'),
+    deliveryRatio('conversion_rate', 'platform_reported_conversions', 'total_ad_clicks'),
+    simple('reported_spend', 'SUM(ad_spend) WHERE [filter applied]', {underlying_model: adTable.name, has_filter: true,
+      filter_condition: 'ad_clicks is not null'})], all, options.dataset, documented(all));
+  assert.deepEqual(catalog.unsupported, []);
+  const reported = {any: [{column: 'ad_impressions', isNull: false}, {column: 'ad_clicks', isNull: false}]};
+  const cpc = catalog.metrics.find(m => m.name === 'cost_per_click');
+  assert.deepEqual(cpc.calculation, ['/', ['sum-where', {field: 'ad_spend'}, reported], ['sum-where', {field: 'ad_clicks'}, reported]]);
+  assert.deepEqual(cpc.dependencies, []);
+  assert.equal(sqlExpression(cpc, catalog.metrics), 'SAFE_DIVIDE(' +
+    'SUM(IF((`ad_impressions` IS NOT NULL OR `ad_clicks` IS NOT NULL), `ad_spend`, 0)), ' +
+    'SUM(IF((`ad_impressions` IS NOT NULL OR `ad_clicks` IS NOT NULL), `ad_clicks`, 0)))');
+  assert.equal(sqlExpression(catalog.metrics.find(m => m.name === 'reported_spend'), catalog.metrics),
+    'SUM(IF(`ad_clicks` IS NOT NULL, `ad_spend`, 0))');
+  const model = catalog.models.find(m => m.name === adTable.name);
+  const card = metricCard({...cpc, valueFormat: 'currency'}, model, options.database, 99, new Map());
+  const test = ['or', ['not-null', ['field', 46, null]], ['not-null', ['field', 47, null]]];
+  assert.deepEqual(card.dataset_query.query.aggregation, [['/', ['sum-where', ['field', 45, null], test], ['sum-where', ['field', 47, null], test]]]);
+  assert.deepEqual(Object.keys(card.visualization_settings.column_settings), [JSON.stringify(['name', 'expression'])]);
+  const built = definitions(catalog, all, foundationSql(), options);
+  for (const key of ['metric:cost_per_click', 'snippet:cost_per_click', 'metric:conversion_rate', 'snippet:conversion_rate']) {
+    assert.ok(built.nodes.some(n => n.key === key), key);
+  }
+});
+
+test('a filtered ratio needs plain sums on both sides and a filter with a verified mapping', () => {
+  const all = [...tables, adTable];
+  const cases = [deliveryRatio('per_store', 'total_ad_spend', 'stores'),
+    deliveryRatio('expression_filter', 'total_ad_spend', 'total_ad_clicks', {filter_condition: "(lower(source_system)) = 'meta'"}),
+    deliveryRatio('and_filter', 'total_ad_spend', 'total_ad_clicks', {filter_condition: '(ad_impressions is not null) and (ad_clicks is not null)'}),
+    deliveryRatio('unknown_column', 'total_ad_spend', 'total_ad_clicks', {filter_condition: '(ad_impressions is not null or ad_views is not null)'})];
+  const catalog = compileCatalog([...rows, ...paidRows, simple('stores', 'COUNT(DISTINCT sm_store_id)', {underlying_model: adTable.name}), ...cases],
+    all, options.dataset, documented(all));
+  assert.ok(catalog.metrics.some(m => m.name === 'stores'));
+  assert.deepEqual(catalog.unsupported.map(u => u.name).sort(), cases.map(c => c.metric_name).sort());
+});
+
 test('other filtered metrics stay unsupported rather than approximated', () => {
   const cases = [
     simple('filtered_count', 'COUNT(order_count) WHERE [filter applied]', {has_filter: true, filter_condition: validChannelFilter}),
