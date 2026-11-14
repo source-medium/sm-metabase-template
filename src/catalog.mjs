@@ -4,12 +4,14 @@ const ident = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const numeric = new Set(['type/Integer', 'type/BigInteger', 'type/Float', 'type/Decimal', 'type/Number']);
 export const field = f => ['field', f.id, null];
 
-// The two filter shapes the catalog publishes: a column restricted to a list of literals
-// (`sm_channel in ('online_dtc', 'amazon')`) and a boolean column (`is_order_sm_valid`).
+// The filter shapes the catalog publishes: a column restricted to a list of literals
+// (`sm_channel in ('online_dtc', 'amazon')`), a boolean column (`is_order_sm_valid`), a
+// null test (`ad_clicks is not null`), and a parenthesized OR of those. The per-click
+// ratios count only rows that report delivery,
+// `(ad_impressions is not null or ad_clicks is not null)` (reporting_queries #2631).
 // Anything else stays unsupported rather than approximated.
 const LITERAL = /^[A-Za-z0-9_.-]+$/;
-function rowFilter(row, columns) {
-  const text = (row.filter_condition ?? '').trim();
+function predicate(text, columns) {
   const list = /^([A-Za-z_][A-Za-z0-9_]*)\s+in\s+\(([^()]*)\)$/i.exec(text);
   if (list) {
     const column = columns.get(list[1]);
@@ -17,9 +19,19 @@ function rowFilter(row, columns) {
     if (column?.base_type !== 'type/Text' || !values.length || values.some(v => v === undefined || !LITERAL.test(v))) return null;
     return {column: column.name, values};
   }
+  const nullTest = /^([A-Za-z_][A-Za-z0-9_]*)\s+is\s+(not\s+)?null$/i.exec(text);
+  if (nullTest) return columns.has(nullTest[1]) ? {column: nullTest[1], isNull: !nullTest[2]} : null;
   const flag = /^([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*true)?$/i.exec(text);
   if (flag && columns.get(flag[1])?.base_type === 'type/Boolean') return {column: flag[1], values: [true]};
   return null;
+}
+function rowFilter(row, columns) {
+  const text = (row.filter_condition ?? '').trim();
+  const group = /^\((.*)\)$/.exec(text);
+  if (!group) return predicate(text, columns);
+  const any = group[1].split(/\s+or\s+/i).map(part => predicate(part.trim(), columns));
+  if (any.some(p => !p)) return null;
+  return any.length === 1 ? any[0] : {any};
 }
 
 // Target mapping only. Business calculations and filters belong to the catalog.
@@ -55,7 +67,7 @@ export function compileCatalog(rows, tables, dataset, dictionary) {
     const dependencies = [];
     const filtered = row.has_filter !== false || Boolean(row.filter_condition);
     const condition = filtered ? rowFilter(row, columns) : null;
-    if (filtered && !condition) { visiting.delete(name); return refuse('Only a sum over a stated column list or boolean column filter has a verified mapping.'); }
+    if (filtered && !condition) { visiting.delete(name); return refuse('Only a column list, boolean column or null-test filter has a verified mapping.'); }
     if (row.metric_type === 'simple') {
       const match = /^(SUM|COUNT|AVG|MIN|MAX)\(\s*(DISTINCT\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\)(\s+WHERE\s+\[filter applied\])?$/i.exec(row.calculation?.trim() ?? '');
       // A filtered metric is a conditional sum; other filtered aggregations need their own mapping.
@@ -73,11 +85,17 @@ export function compileCatalog(rows, tables, dataset, dictionary) {
     } else if (row.metric_type === 'ratio') {
       const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*\/\s*([A-Za-z_][A-Za-z0-9_]*)$/.exec(row.calculation?.trim() ?? '');
       const declared = (row.dependent_metrics ?? '').split(',').map(v => v.trim()).filter(Boolean);
-      if (match && !filtered && new Set(declared).size === 2 && declared.length === 2 && match.slice(1).every(n => declared.includes(n))) {
+      if (match && new Set(declared).size === 2 && declared.length === 2 && match.slice(1).every(n => declared.includes(n))) {
         const sides = match.slice(1).map(resolve);
-        if (sides.every(s => s?.table === model.name && s.time === time.name)) {
+        if (!sides.every(s => s?.table === model.name && s.time === time.name)) calculation = null;
+        else if (!filtered) {
           dependencies.push(...match.slice(1));
           calculation = ['/', ...dependencies.map(metric => ({metric}))];
+        } else if (sides.every(s => s.calculation[0] === 'sum')) {
+          // A ratio's filter applies to both its sides, so each becomes a conditional sum of
+          // its column; a referenced metric cannot carry the filter.
+          inputs.push(...sides.map(s => s.calculation[1].field));
+          calculation = ['/', ...sides.map(s => ['sum-where', s.calculation[1], condition])];
         }
       }
     }
@@ -96,31 +114,40 @@ export function compileCatalog(rows, tables, dataset, dictionary) {
 
 export function bind(expression, columns, metricIds) {
   if (Array.isArray(expression)) return expression.map(v => bind(v, columns, metricIds));
+  if (expression?.any) return ['or', ...expression.any.map(v => bind(v, columns, metricIds))];
+  if (typeof expression?.isNull === 'boolean') return [expression.isNull ? 'is-null' : 'not-null', field(columns.find(f => f.name === expression.column))];
   if (expression?.values) return ['=', field(columns.find(f => f.name === expression.column)), ...expression.values];
   if (expression?.field) return field(columns.find(f => f.name === expression.field));
   if (expression?.metric) return ['metric', metricIds.get(expression.metric)];
   return expression;
 }
 
+function conditionSql(condition) {
+  if (condition.any) return `(${condition.any.map(conditionSql).join(' OR ')})`;
+  if (!ident.test(condition.column)) throw new Error('Invalid metric filter column.');
+  const column = `\`${condition.column}\``;
+  if (typeof condition.isNull === 'boolean') return `${column} IS ${condition.isNull ? '' : 'NOT '}NULL`;
+  const {values} = condition;
+  return values.length === 1 && values[0] === true ? column : `${column} IN (${values.map(v => `'${v}'`).join(', ')})`;
+}
+
 export function sqlExpression(metric, metrics, trail = []) {
   if (trail.includes(metric.name)) throw new Error('Cyclic metric SQL dependency.');
-  const expression = metric.calculation;
-  if (expression[0] === '/') {
-    const sides = expression.slice(1).map(ref => {
-      const dependency = metrics.find(m => m.name === ref.metric);
-      if (!dependency) throw new Error('Missing metric SQL dependency.');
-      return sqlExpression(dependency, metrics, [...trail, metric.name]);
-    });
-    return `SAFE_DIVIDE(${sides.join(', ')})`;
-  }
-  const column = expression[1].field;
-  if (!ident.test(column)) throw new Error('Invalid physical metric column.');
-  if (expression[0] === 'sum-where') {
-    const {column: filterColumn, values} = expression[2];
-    if (!ident.test(filterColumn)) throw new Error('Invalid metric filter column.');
-    const test = values.length === 1 && values[0] === true ? `\`${filterColumn}\`` :
-      `\`${filterColumn}\` IN (${values.map(v => `'${v}'`).join(', ')})`;
-    return `SUM(IF(${test}, \`${column}\`, 0))`;
-  }
-  return expression[0] === 'distinct' ? `COUNT(DISTINCT \`${column}\`)` : `${expression[0].toUpperCase()}(\`${column}\`)`;
+  const aggregation = expression => {
+    if (expression[0] === '/') {
+      const sides = expression.slice(1).map(side => {
+        // A filtered ratio carries its sides inline as conditional sums.
+        if (Array.isArray(side)) return aggregation(side);
+        const dependency = metrics.find(m => m.name === side.metric);
+        if (!dependency) throw new Error('Missing metric SQL dependency.');
+        return sqlExpression(dependency, metrics, [...trail, metric.name]);
+      });
+      return `SAFE_DIVIDE(${sides.join(', ')})`;
+    }
+    const column = expression[1].field;
+    if (!ident.test(column)) throw new Error('Invalid physical metric column.');
+    if (expression[0] === 'sum-where') return `SUM(IF(${conditionSql(expression[2])}, \`${column}\`, 0))`;
+    return expression[0] === 'distinct' ? `COUNT(DISTINCT \`${column}\`)` : `${expression[0].toUpperCase()}(\`${column}\`)`;
+  };
+  return aggregation(metric.calculation);
 }
