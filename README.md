@@ -103,8 +103,8 @@ explains each one.
 1. **A Metabase on version 0.64 or 0.65.** [Metabase Cloud](https://www.metabase.com/cloud)
    or the free open-source edition on your own server; any edition works.
 2. **A key file.** In your SourceMedium workspace, an editor or admin opens
-   **Dashboards & Apps**, chooses **Customize with your own code** on the
-   SourceMedium Dashboards row, presses **Create key** in its key step and
+   **Dashboards & Apps**, opens **Bring your own tool**, chooses **Install the
+   template** on **Metabase Template**, presses **Create key** in its key step and
    downloads the key file from the panel that opens. It is shown once.
 3. **The BigQuery connection.** Follow
    [Connect Metabase](https://sourcemedium.com/docs/onboarding/analytics-tools/connect-metabase),
@@ -128,9 +128,9 @@ to mine while preserving my content. Ask only for missing inputs and private
 credential-file paths, and show me the plan before changing anything.
 ```
 
-**Dashboards & Apps** has the same prompts under **Customize with your own
-code** on the SourceMedium Dashboards row, and under **Manage** on your Metabase
-key. The
+**Dashboards & Apps** has the same prompts under **Bring your own tool**: on
+**Metabase Template** behind **Install the template**, and under **Manage** on your
+Metabase key. The
 agent asks for your Metabase address and a private file holding a Metabase API
 key, discovers the rest, and shows you a plan before it writes.
 
