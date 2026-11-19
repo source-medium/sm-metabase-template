@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {compileCatalog, sqlExpression} from '../src/catalog.mjs';
 import {foundationSql} from '../src/foundation.mjs';
-import {questions, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
+import {questions, dashboards, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
 import {filtersIn} from '../src/filters.mjs';
 import {foundationTables, documented, options} from './fixtures.mjs';
 
@@ -114,4 +114,40 @@ test('tables name channels and ad platforms; filters and keys keep the stored va
   // The breakdown joins its periods on the stored platform, not its display name.
   assert.match(sql.paid_breakdown, /ELSE IFNULL\(source_system, '\(none\)'\)\n {4}END AS breakdown_key/);
   for (const key of ['paid_channel', 'creatives']) assert.ok(sql[key].includes('{{ad_platform}}'), `${key} filters the stored platform`);
+});
+
+const rawSql = key => readFileSync(new URL(`../foundation/sql/${key}.sql`, import.meta.url), 'utf8');
+const creativeQuestions = ['creative_totals', 'creative_formats', 'creative_launches', 'creatives'];
+
+test('creative questions take first spend from one definition, looking back a year from the selection', () => {
+  for (const key of ['creative_totals', 'creative_launches', 'creatives']) {
+    assert.match(rawSql(key), /^-- @include first_spend$/m, `${key} uses the shared first spend`);
+    assert.doesNotMatch(rawSql(key), /MIN\(date\) AS first_spend/, `${key} defines no first spend of its own`);
+    assert.match(sql[key], /DATE_SUB\(start_date, INTERVAL 365 DAY\) FROM selected\) AND \(SELECT end_date FROM selected\)/);
+  }
+});
+
+test('a creative is its ad platform name and ID wherever creatives are counted', () => {
+  for (const key of creativeQuestions) {
+    const counts = [...sql[key].matchAll(/COUNT\(DISTINCT IF\([^,]+,([\s\S]*?), NULL\)\)/g)];
+    if (key !== 'creatives') assert.ok(counts.length > 0, `${key} counts creatives`);
+    for (const count of counts)
+      assert.ok(/WHEN 'facebook_ads' THEN 'Meta'[\s\S]*, '\/', ad_creative_id\)/.test(count[1]) || count[1].trim() === 'creative_key',
+        `${key} counts a creative by its platform name: ${count[1].trim().slice(0, 60)}`);
+  }
+});
+
+test('selecting a format, (none) included, filters the tab by the name the formats table shows', () => {
+  const formatName = readFileSync(new URL('../foundation/sql/include/creative_format_name.sql', import.meta.url), 'utf8')
+    .replace(/^--.*\n/gm, '').trim();
+  assert.match(formatName, /ELSE IFNULL\(ad_creative_format, '\(none\)'\)\nEND$/, 'a blank format shows as (none)');
+  const click = dashboards().flatMap(d => d.cards).find(c => c.key === 'question:creative_formats')?.clicks;
+  assert.deepEqual(click, [{column: 'creative_format', set: {creative_format: 'creative_format'}}]);
+  assert.ok(sql.creative_formats.includes(`${formatName}\n    AS creative_format`), 'the clicked column is the format name');
+  assert.ok(!sql.creative_formats.includes('{{creative_format}}'), 'the formats table lists every format');
+  for (const key of ['creative_totals', 'creative_launches', 'creatives']) {
+    const filters = [...sql[key].matchAll(/\[\[AND\n\s*([\s\S]*?)\n\s*= \{\{creative_format\}\}\]\]/g)];
+    assert.ok(filters.length >= 2, `${key} filters its selection and its rows`);
+    for (const filter of filters) assert.equal(filter[1].replace(/^--.*\n/gm, '').replace(/^\s+/gm, ''), formatName.replace(/^\s+/gm, ''));
+  }
 });

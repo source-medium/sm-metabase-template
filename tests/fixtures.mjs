@@ -39,7 +39,8 @@ export const adTable = {id: 40, name: 'rpt_ad_performance_daily', schema: option
   column('ad_platform_reported_revenue', 49, 'type/Float'), column('ad_account_id', 50, 'type/Text'), column('ad_campaign_id', 51, 'type/Text'),
   column('ad_creative_id', 52, 'type/Text'), column('ad_creative_title', 53, 'type/Text'), column('ad_creative_thumbnail_url', 54, 'type/Text'),
   ...['ad_campaign_name', 'ad_group_name', 'ad_name', 'ad_campaign_type', 'ad_campaign_tactic', 'ad_creative_body',
-    'ad_creative_call_to_action_type', 'ad_creative_image_url', 'ad_creative_facebook_url', 'ad_creative_instagram_url']
+    'ad_creative_call_to_action_type', 'ad_creative_image_url', 'ad_creative_facebook_url', 'ad_creative_instagram_url',
+    'ad_creative_name', 'ad_creative_format', 'ad_creative_post_url']
     .map((name, i) => column(name, 400 + i, 'type/Text'))]};
 const paid = (name, expr, extra = {}) => simple(name, expr, {underlying_model: adTable.name, ...extra});
 const paidRatio = (name, a, b) => paid(name, `${a} / ${b}`, {metric_type: 'ratio', dependent_metrics: `${a}, ${b}`});

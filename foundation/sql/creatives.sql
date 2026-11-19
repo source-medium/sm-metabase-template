@@ -1,10 +1,20 @@
-WITH creatives AS (
+WITH selected AS (
+  SELECT MIN(date) AS start_date, MAX(date) AS end_date
+  FROM `DATASET.rpt_ad_performance_daily`
+  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    -- @include creative_format_filter
+),
+-- @include periods
+-- @include first_spend
+creatives AS (
   SELECT
+    periods.position,
     ARRAY_AGG(COALESCE(ad_creative_image_url, ad_creative_thumbnail_url) IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS image_url,
     -- @include ad_platform_name
     AS ad_platform,
     ad_creative_id AS creative_id,
-    MAX(ad_creative_title) AS creative_title,
+    COALESCE(MAX(ad_creative_title), ARRAY_AGG(ad_creative_name IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)]) AS creative_title,
+    ARRAY_AGG(ad_creative_format IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS ad_creative_format,
     MAX(ad_creative_body) AS creative_body,
     MAX(ad_creative_call_to_action_type) AS call_to_action,
     SUM(ad_spend) AS ad_spend,
@@ -15,15 +25,53 @@ WITH creatives AS (
     SUM(ad_platform_reported_revenue) AS platform_revenue,
     SAFE_DIVIDE(SUM(ad_platform_reported_revenue), SUM(ad_spend)) AS platform_roas,
     SAFE_DIVIDE(SUM(ad_spend), SUM(ad_platform_reported_conversions)) AS cost_per_platform_conversion,
-    ARRAY_AGG(COALESCE(ad_creative_facebook_url, ad_creative_instagram_url) IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS ad_url
-  FROM `DATASET.rpt_ad_performance_daily`
-  WHERE ad_creative_id IS NOT NULL
-    AND {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
-  GROUP BY ad_platform, creative_id
+    ARRAY_AGG(COALESCE(NULLIF(ad_creative_post_url, ''), NULLIF(ad_creative_facebook_url, ''), NULLIF(ad_creative_instagram_url, ''))
+      IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS ad_url
+  FROM periods
+  JOIN `DATASET.rpt_ad_performance_daily`
+    ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date
+  WHERE periods.position IN (1, 2) AND ad_creative_id IS NOT NULL
+    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    -- @include creative_format_filter
+  GROUP BY periods.position, ad_platform, creative_id
+),
+compared AS (
+  SELECT
+    selection.* EXCEPT (position),
+    IF(launches.first_spend > (SELECT DATE_SUB(start_date, INTERVAL 365 DAY) FROM selected), launches.first_spend, NULL) AS first_spend,
+    comparison.ad_spend AS compare_ad_spend,
+    comparison.platform_roas AS compare_platform_roas
+  FROM creatives selection
+  LEFT JOIN creatives comparison
+    ON comparison.position = 2 AND comparison.ad_platform = selection.ad_platform AND comparison.creative_id = selection.creative_id
+  LEFT JOIN launches ON launches.ad_platform = selection.ad_platform AND launches.creative_id = selection.creative_id
+  WHERE selection.position = 1
+    AND IFNULL(selection.ad_spend, 0) >= {{min_spend}} AND IFNULL(selection.platform_conversions, 0) >= {{min_conversions}}
 )
-SELECT *
-FROM creatives
-WHERE IFNULL(ad_spend, 0) >= {{min_spend}} AND IFNULL(platform_conversions, 0) >= {{min_conversions}}
+SELECT
+  image_url,
+  ad_platform,
+  creative_title,
+  -- @include creative_format_name
+  AS creative_format,
+  first_spend,
+  ad_spend,
+  compare_ad_spend,
+  SAFE_DIVIDE(ad_spend, compare_ad_spend) - 1 AS ad_spend_change,
+  impressions,
+  clicks,
+  click_through_rate,
+  platform_conversions,
+  cost_per_platform_conversion,
+  platform_revenue,
+  platform_roas,
+  compare_platform_roas,
+  SAFE_DIVIDE(platform_roas, compare_platform_roas) - 1 AS platform_roas_change,
+  creative_body,
+  call_to_action,
+  ad_url,
+  creative_id
+FROM compared
 ORDER BY
   CASE {{creative_sort}}
     WHEN 'impressions' THEN impressions
@@ -33,6 +81,7 @@ ORDER BY
     WHEN 'revenue' THEN platform_revenue
     WHEN 'roas' THEN platform_roas
     WHEN 'cost_per_conversion' THEN -cost_per_platform_conversion
+    WHEN 'newest' THEN UNIX_DATE(first_spend)
     ELSE ad_spend
   END DESC NULLS LAST,
   ad_platform, creative_id
