@@ -30,4 +30,4 @@ SELECT
   SAFE_DIVIDE(measures.platform_revenue, measures.platform_conversions) AS platform_revenue_per_conversion,
   measures.cost_per_platform_conversion
 FROM measures
-ORDER BY measures.period_start IS NULL, measures.period_start DESC
+ORDER BY measures.period_start IS NULL DESC, measures.period_start DESC

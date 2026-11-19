@@ -47,7 +47,7 @@ const scalar = column => ({'scalar.field': column, 'scalar.comparisons': [
 const neutralScalar = column => ({'scalar.field': column});
 // A daily line with the Compare with period dashed beside it, day for day.
 const trendLine = (column, title) => ({'graph.dimensions': ['date'], 'graph.metrics': [column, `compare_${column}`],
-  'graph.x_axis.title_text': 'Date', 'graph.y_axis.title_text': title,
+  'graph.x_axis.title_text': 'Date', 'graph.y_axis.title_text': title, 'graph.y_axis.auto_split': false,
   series_settings: {[column]: {title}, [`compare_${column}`]: {title: `${title} (comparison)`, 'line.style': 'dashed'}}});
 // Green when a change column rose and red when it fell, for measures where higher is
 // better. Spend and mixed-measure columns (Revenue and deductions, product rankings that
@@ -59,7 +59,7 @@ const changeColors = (...columns) => ({'table.column_formatting': [
   {id: 0, columns, type: 'single', operator: '>', value: 0, color: UP, highlight_row: false},
   {id: 1, columns, type: 'single', operator: '<', value: 0, color: DOWN, highlight_row: false}]});
 // A table showing only some of its question's columns, in SQL order.
-const showing = (all, shown) => ({'table.columns': all.map(name => ({name, enabled: shown.includes(name)}))});
+const showing = (all, shown = all) => ({'table.columns': all.map(name => ({name, enabled: shown.includes(name)}))});
 const BUSINESS = ['period', 'net_revenue', 'summary_orders', 'net_revenue_per_summary_order', 'ad_spend', 'mer', 'sessions',
   'gross_revenue', 'discounts', 'demand_before_returns', 'refunds', 'spend_per_order', 'spend_per_session', 'spend_share_of_revenue',
   'new_revenue', 'new_orders', 'new_revenue_per_order', 'repeat_revenue', 'repeat_orders', 'repeat_revenue_per_order',
@@ -67,7 +67,7 @@ const BUSINESS = ['period', 'net_revenue', 'summary_orders', 'net_revenue_per_su
 const MONTHS = [...Array(12).keys()];
 const MATRIX = ['cohort', 'cohort_size', ...MONTHS.map(m => `rate_month_${m}`), ...MONTHS.map(m => `value_month_${m}`)];
 const heat = prefix => ({'table.column_formatting': [{id: 0, columns: MONTHS.map(m => `${prefix}_month_${m}`), type: 'range',
-  colors: ['#FFFFFF', '#509EE3'], min_type: null, max_type: null, operator: '=', value: '', color: '#509EE3', highlight_row: false}]});
+  colors: ['#509EE310', '#509EE399'], min_type: null, max_type: null, operator: '=', value: '', color: '#509EE3', highlight_row: false}]});
 const ORDER_COLUMNS = ['processed_at', 'order_name', 'store_id', 'channel', 'order_type', 'payment_status', 'is_valid',
   'cart_units', 'net_revenue', 'source_medium', 'country', 'region', 'order_key'];
 const image = {view_as: 'image'};
@@ -106,6 +106,12 @@ export const questions = [
   {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change', 'summary_orders_change', 'mer_change'),
     description: 'The selected dates against Compare with and Second comparison. Previous period follows the selection: one day compares with the same weekday a week earlier, a calendar month, quarter or year with the one before, other ranges with the days just before. Periods run from the first to the last selected date with summary rows; Change is the selected period divided by the comparison period, minus one.',
     metrics: pick(summaryMetrics, 'net_revenue', 'summary_orders', 'ad_spend', 'mer')},
+  {key: 'comparison_measures', name: 'Selected period vs. baselines', table: SUMMARY, date: 'date',
+    description: 'Each measure shows its selected value followed by each baseline. Change is the selected value relative to that row. Start and end dates are available in the question.',
+    settings: {...showing(['measure_period', 'display_value', 'value_change', 'start_date', 'end_date'], ['measure_period', 'display_value', 'value_change']),
+      'table.column_widths': [128, 86, 72], 'table.pagination': false},
+    columns: {measure_period: {column_title: 'Measure / period', text_wrapping: true}, display_value: {column_title: 'Value'}, value_change: {column_title: 'Change'}},
+    metrics: pick(summaryMetrics, 'net_revenue', 'summary_orders', 'ad_spend', 'mer')},
   {key: 'trend', name: 'Net revenue by day', table: SUMMARY, date: 'date', display: 'line', settings: trendLine('net_revenue', 'Net revenue'),
     description: 'Daily or cumulative values (Trend values), with Compare with dashed, day for day. Cumulative values sum each day from the period start, so ratios stay ratios of sums. Missing days are gaps.',
     metrics: {...summaryMetrics, sessions: 'website_sessions_summary'},
@@ -116,6 +122,7 @@ export const questions = [
       {key: 'trend_mer', name: 'Marketing efficiency by day', display: 'line', settings: trendLine('mer', 'MER')},
       {key: 'trend_sessions', name: 'Website sessions by day', display: 'line', settings: trendLine('sessions', 'Sessions')}]},
   {key: 'revenue_changes', name: 'Biggest changes', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_difference', 'net_revenue_change'),
+    columns: {net_revenue_difference: {column_title: 'Revenue difference'}, net_revenue_change: {column_title: 'Revenue change (%)'}},
     description: 'The three selected dates whose net revenue moved most against the same day of Compare with.',
     metrics: pick(summaryMetrics, 'net_revenue')},
   {key: 'contributions', name: 'Sales channel contributions', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_difference'),
@@ -127,7 +134,7 @@ export const questions = [
     description: 'Published order measures, not unique buyers, against Compare with. Classification coverage can prevent reconciliation to headline totals.'},
   {key: 'business', name: 'Business summary', table: SUMMARY, date: 'date', settings: showing(BUSINESS,
     ['period', 'net_revenue', 'summary_orders', 'net_revenue_per_summary_order', 'ad_spend', 'mer', 'sessions']),
-    description: 'Summary measures by Day, Week (Monday start) or Month (Period), newest first, with the selected period total last. Edge periods the dates only partly cover are marked partial.',
+    description: 'Summary measures by Day, Week (Monday start) or Month (Period), with the selected period total first, followed by periods newest first. Edge periods the dates only partly cover are marked partial.',
     metrics: {...summaryMetrics, sessions: 'website_sessions_summary'},
     variants: [
       {key: 'business_revenue', name: 'Revenue and orders', display: 'table', settings: showing(BUSINESS, ['period', 'net_revenue',
@@ -139,7 +146,9 @@ export const questions = [
   {key: 'store_context', name: 'Reporting context', table: 'dim_stores',
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'store_timezone'], [SUMMARY]: ['sm_store_id', 'date']},
     description: 'Each store\'s reporting currency and time zone, and its latest date with summary rows. Dates are calendar dates in the store\'s time zone; the latest day may be incomplete.'},
-  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change'),
+  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', settings: {...changeColors('net_revenue_change'),
+      ...showing(['store_name', 'net_revenue', 'net_revenue_change', 'store_currency', 'summary_orders', 'ad_spend', 'mer',
+        'net_revenue_per_summary_order', 'latest_date', 'brand_name', 'logo_url', 'store_id'])},
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'brand_name', 'store_logo_url']},
     columns: {logo_url: image},
     description: 'One row per store, never a cross-store total: stores can report in different currencies. Revenue change is against Compare with. Select a store to open its executive summary.',
@@ -151,7 +160,7 @@ export const questions = [
   {key: 'paid_channel', name: 'Ad platform economics', table: ADS, date: 'date',
     description: 'Per advertising platform across all sales channels. Platform attribution can overlap; ROAS is not MER or incrementality. Check currency and volume.',
     metrics: paidMetrics},
-  {key: 'paid_trend', name: 'Paid measure by ad platform over time', table: ADS, date: 'date', display: 'line',
+  {key: 'paid_trend', name: 'Ad platform trend', table: ADS, date: 'date', display: 'line',
     settings: {'graph.dimensions': ['period', 'ad_platform'], 'graph.metrics': ['value'], 'graph.x_axis.title_text': 'Period',
       'graph.y_axis.title_text': 'Trend measure'},
     description: 'The Trend measure by Day, Week or Month for the seven ad platforms with the most impressions, the rest as Other. Ratios are recomputed from each line\'s sums.',
@@ -216,12 +225,14 @@ export const questions = [
     variants: [
       {key: 'geography_orders_total', name: 'Valid orders', display: 'smartscalar', settings: scalar('orders')},
       {key: 'geography_coverage', name: 'Mapped-order coverage', display: 'smartscalar', settings: scalar('mapped_coverage')}]},
-  {key: 'geography', name: 'Shipping countries', table: ORDERS, date: PROCESSED, settings: changeColors('net_revenue_change'),
+  {key: 'geography', name: 'Shipping countries', table: ORDERS, date: PROCESSED, settings: {...changeColors('net_revenue_change'),
+      ...showing(['country', 'net_revenue', 'net_revenue_change', 'orders', 'net_revenue_per_order', 'share_of_net_revenue', 'compare_net_revenue'])},
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid orders by shipping country and processed date, with revenue change against Compare with. Select a country to see its regions. Select one store: currencies can differ between stores.',
     variants: [{key: 'geography_map', name: 'Valid orders by country', display: 'map',
       settings: {'map.type': 'region', 'map.region': 'world_countries', 'map.dimension': 'country', 'map.metric': 'orders'}}]},
-  {key: 'geography_regions', name: 'Shipping regions', table: ORDERS, date: PROCESSED, settings: changeColors('net_revenue_change'),
+  {key: 'geography_regions', name: 'Shipping regions', table: ORDERS, date: PROCESSED, settings: {...changeColors('net_revenue_change'),
+      ...showing(['country', 'region', 'net_revenue', 'net_revenue_change', 'orders', 'net_revenue_per_order', 'compare_net_revenue'])},
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid orders by shipping region in the selected country (every country when none is selected). US states are normalized to their two-letter codes. Select a region to scope the totals and orders.'},
   {key: 'geography_states', name: 'Valid orders by US state', table: ORDERS, date: PROCESSED, display: 'map',
@@ -229,7 +240,8 @@ export const questions = [
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid US orders by state, shaded by orders. Other countries\' regions are in the regions table.'},
   {key: 'geography_trend', name: 'Shipping scope by day', table: ORDERS, date: PROCESSED, display: 'line',
-    settings: {'graph.dimensions': ['date'], 'graph.metrics': ['net_revenue', 'orders'], 'graph.x_axis.title_text': 'Date'},
+    settings: {'graph.dimensions': ['date'], 'graph.metrics': ['net_revenue', 'orders'], 'graph.x_axis.title_text': 'Date',
+      series_settings: {net_revenue: {title: 'Net revenue'}, orders: {title: 'Orders'}}},
     requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
     description: 'Valid-order net revenue and valid orders by processed date for the shipping scope.'},
   {key: 'orders', name: 'Orders, newest first', table: ORDERS, date: PROCESSED, settings: showing(ORDER_COLUMNS, ORDER_COLUMNS.slice(0, -1)),
@@ -330,7 +342,7 @@ export const outputFormats = {
   ...Object.fromEntries(MONTHS.flatMap(m => [[`rate_month_${m}`, 'percent'], [`value_month_${m}`, 'currency']])),
 };
 /** Outputs that are labels, dates or identifiers rather than measures. */
-export const outputDimensions = ['readout', 'comparison_label', 'revenue_words', 'spend_words', 'efficiency_words', 'date', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
+export const outputDimensions = ['measure_period', 'display_value', 'readout', 'comparison_label', 'revenue_words', 'spend_words', 'efficiency_words', 'date', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
   'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
@@ -365,16 +377,17 @@ export function dashboards() {
       description: 'Summary-system KPIs, every sales channel by default, against Compare with and Second comparison. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
       tabs: ['Overview', 'Business review'], cards: [
         layout('readout', 0, 0, 24, 3, 0),
-        layout('kpis', 3, 0, 8, 4, 0), layout('kpi_orders', 3, 8, 8, 4, 0), layout('kpi_spend', 3, 16, 8, 4, 0),
-        layout('kpi_mer', 7, 0, 8, 4, 0), layout('kpi_order_value', 7, 8, 8, 4, 0), layout('kpi_sessions', 7, 16, 8, 4, 0),
-        layout('comparison', 11, 0, 24, 5, 0), withFilters(layout('trend', 16, 0, 24, 7, 0), 'trend_values'),
-        layout('trend_orders', 23, 0, 8, 5, 0), layout('trend_order_value', 23, 8, 8, 5, 0), layout('trend_spend', 23, 16, 8, 5, 0),
-        layout('trend_mer', 28, 0, 8, 5, 0), layout('trend_sessions', 28, 8, 8, 5, 0), layout('revenue_changes', 28, 16, 8, 5, 0),
-        layout('contributions', 33, 0, 24, 8, 0),
-        layout('deductions', 0, 0, 10, 7, 1), layout('purchase_mix', 0, 10, 14, 7, 1), withFilters(layout('business', 7, 0, 24, 9, 1), 'grain'),
+        layout('kpis', 3, 0, 8, 7, 0), layout('kpi_orders', 3, 8, 8, 7, 0), layout('kpi_spend', 3, 16, 8, 7, 0),
+        layout('kpi_mer', 10, 0, 8, 7, 0), layout('kpi_order_value', 10, 8, 8, 7, 0), layout('kpi_sessions', 10, 16, 8, 7, 0),
+        layout('comparison_measures', 17, 0, 24, 9, 0), withFilters(layout('trend', 26, 0, 24, 7, 0), 'trend_values'),
+        layout('trend_orders', 33, 0, 8, 5, 0), layout('trend_order_value', 33, 8, 8, 5, 0), layout('trend_spend', 33, 16, 8, 5, 0),
+        layout('trend_mer', 38, 0, 12, 5, 0), layout('trend_sessions', 38, 12, 12, 5, 0),
+        layout('revenue_changes', 43, 0, 24, 5, 0), layout('contributions', 48, 0, 24, 8, 0),
+        withFilters(layout('business', 0, 0, 24, 9, 1), 'grain'),
+        layout('deductions', 9, 0, 10, 7, 1), layout('purchase_mix', 9, 10, 14, 7, 1),
         layout('store_context', 16, 0, 24, 4, 1)]},
     {key: 'dashboard:performance', label: 'Performance tables', name: 'SourceMedium performance tables',
-      description: 'Summary and platform measures by Day, Week or Month (Period), with the selected period total last.',
+      description: 'Summary and platform measures by Day, Week or Month (Period), with the selected period total first.',
       tabs: [], cards: [layout('business_revenue', 0, 0, 24, 9), layout('business_efficiency', 9, 0, 24, 9),
         layout('business_purchases', 18, 0, 24, 9), layout('platform_periods', 27, 0, 24, 9)]},
     {key: 'dashboard:stores', label: 'All stores', name: 'SourceMedium all stores',
@@ -382,8 +395,8 @@ export function dashboards() {
       tabs: [], cards: [layout('stores', 0, 0, 24, 8, null, [{column: 'store_name', dashboard: 'dashboard:summary', set: {store: 'store_id'}}])]},
     {key: 'dashboard:paid', label: 'Paid marketing', name: 'SourceMedium paid marketing',
       description: 'Platform-attributed economics by advertising platform (source_system), across all sales channels. Ad platform starts clear.',
-      tabs: [], cards: [layout('paid_channel', 0), withFilters(layout('paid_trend', 6, 0, 24, 7), 'paid_metric', 'grain'),
-        withFilters(layout('paid_breakdown_chart', 13, 0, 12, 7), 'breakdown'),
+      tabs: [], cards: [layout('paid_channel', 0), withFilters(layout('paid_trend', 6, 0, 24, 7), 'grain'),
+        layout('paid_breakdown_chart', 13, 0, 12, 7),
         layout('paid_breakdown', 13, 12, 12, 7), layout('paid_campaign', 20, 0, 24, 10, null, [{column: 'campaign_name', set: {campaign: 'campaign_name'}}])]},
     {key: 'dashboard:creatives', label: 'Creatives', name: 'SourceMedium creatives',
       description: 'Creative spend, formats and launches against Compare with, then each creative. Spend counts ads with a creative ID across all sales channels; results are platform-reported. Ad platform starts clear. Select a format to filter the tab by it.',
@@ -394,12 +407,12 @@ export function dashboards() {
         withFilters(layout('creatives', 11, 0, 24, 12), 'creative_sort', 'min_spend', 'min_conversions')]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium products',
       description: 'Order-processed-date basis, valid orders: product totals and ranked products or variants against Compare with, with refund rates and cost coverage.',
-      tabs: [], cards: [layout('product_totals', 0, 0, 12, 4), layout('product_units', 0, 12, 12, 4),
-        withFilters(layout('product', 4, 0, 24, 9), 'product_group', 'product_rank', 'product_ranking')]},
+      tabs: [], cards: [layout('product_totals', 0, 0, 12, 7), layout('product_units', 0, 12, 12, 7),
+        withFilters(layout('product', 7, 0, 24, 9), 'product_group', 'product_ranking')]},
     {key: 'dashboard:retention', label: 'Retention', name: 'SourceMedium retention',
       description: 'Cohort curves and matrices at an explicit completed-month cutoff, optionally for one acquisition segment. Keep store/channel/cohort identities separate.',
-      tabs: [], cards: [withFilters(layout('retention_curve', 0, 0, 12, 7), 'rate', 'cohorts'),
-        withFilters(layout('retention_value_curve', 0, 12, 12, 7), 'value'),
+      tabs: [], cards: [withFilters(layout('retention_curve', 0, 0, 12, 7), 'cohorts'),
+        layout('retention_value_curve', 0, 12, 12, 7),
         layout('retention_matrix', 7, 0, 24, 7), layout('retention_value_matrix', 14, 0, 24, 7),
         layout('retention_segments', 21, 0, 24, 6, null, [{column: 'segment', set: {segment: 'segment'}}])]},
     {key: 'dashboard:geography', label: 'Geography', name: 'SourceMedium geography',

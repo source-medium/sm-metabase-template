@@ -33,3 +33,17 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: node scripts/check.mjs
+
+  installed-sql:
+    name: Installed SQL on synthetic rows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Execute installed queries
+        run: |
+          python3 -m venv "$RUNNER_TEMP/sql-check"
+          "$RUNNER_TEMP/sql-check/bin/pip" install uv==0.13.8
+          "$RUNNER_TEMP/sql-check/bin/uv" run --script tests/test_installed_sql.py

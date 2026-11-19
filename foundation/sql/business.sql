@@ -46,4 +46,4 @@ SELECT
   SAFE_DIVIDE(measures.repeat_revenue, measures.net_revenue) AS repeat_share_of_revenue,
   measures.days_with_rows
 FROM measures
-ORDER BY measures.period_start IS NULL, measures.period_start DESC
+ORDER BY measures.period_start IS NULL DESC, measures.period_start DESC

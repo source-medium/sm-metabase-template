@@ -51,3 +51,21 @@ v0.64.1 and v0.65.3); widen that check only after this pass.
 
 Use only the demo warehouse in screenshots, issues and fixtures. Never commit
 customer identifiers, plans, keys or tokens.
+
+## Capture the dashboard for visual review
+
+With Docker, Node 22+ and just installed, run `npm ci --prefix scripts/ui-capture` and
+`(cd scripts/ui-capture && npx playwright install chromium)`. The installer itself has no npm dependencies.
+Run `just ui-capture --out /path/to/new-packet`. Use `--routes overview,products`,
+`--viewport desktop|mobile` or `--theme light|dark` for a narrower capture.
+
+Capture boots a fresh Metabase 0.65.3 container on loopback and installs the combined dashboard
+from the foundation definitions. Its questions return deterministic visual fixtures from the
+temporary PostgreSQL fixture. Filters display their installed defaults. This checks dashboard
+presentation. SQL reconciliation and filter behavior require the normal installer verification.
+
+Run `uv run --script tests/test_installed_sql.py` to check the installed questions on synthetic
+warehouse rows. This CI job expands the installer's metric snippets and uses SQLGlot and DuckDB
+locally. It checks period ordering and comparison values, plus table settings and capture fields
+against every installed question's final projection. The BigQuery verification above covers the
+warehouse dialect and deployed schema.
