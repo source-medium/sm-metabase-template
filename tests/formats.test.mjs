@@ -122,3 +122,9 @@ test('the plan reports numeric model columns the warehouse publishes no unit for
   assert.ok(!formatting.unformatted.some(m => m.columns.includes('sm_store_id')), 'only numeric columns');
   assert.equal(compiled(withFormats(rows), {}).metrics.find(m => m.name === 'order_net_revenue_summary').valueFormat, 'currency');
 });
+
+test('platform asset fields are labeled only on the current inventory question', () => {
+  const definition = define(compiled());
+  assert.equal(setting(card(definition, 'question:creative_assets'), 'asset_performance_label').column_title, 'Platform rating');
+  assert.equal(setting(card(definition, 'question:creatives'), 'asset_performance_label'), undefined);
+});

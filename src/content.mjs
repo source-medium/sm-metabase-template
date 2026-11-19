@@ -86,7 +86,7 @@ export function nativeCard(recipe, sql, options, table, metrics = []) {
     sql = sql.replaceAll('[[AND {{store}}]]', `AND \`${dataset}.${recipe.table}\`.sm_store_id = {{store}}`);
   }
   const tags = templateTags(recipe, sql, options, table);
-  const column_settings = Object.fromEntries([...new Set([...Object.keys(columnTitles), ...outputAliases(sql)])].flatMap(name => {
+  const column_settings = Object.fromEntries([...new Set([...Object.keys(columnTitles), ...Object.keys(recipe.columns || {}), ...outputAliases(sql)])].flatMap(name => {
     const title = titleOf(name);
     const settings = {...(title ? {column_title: title} : {}), ...columnSettings(outputFormat(recipe, name, metrics)),
       ...recipe.columns?.[name]};
