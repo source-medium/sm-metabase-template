@@ -215,7 +215,8 @@ export const rows = {
   creative_assets: creativeRows.flatMap(row => [
     {asset_role: 'title', asset_text: row.creative_title}, {asset_role: 'body', asset_text: row.creative_body},
   ].map(asset => ({store_id: 'store-1', ad_platform: row.ad_platform, creative_id: row.creative_id, ...asset,
-    image_url: null, video_url: null, destination_url: null, asset_video_id: null, asset_id: null, ad_id: null, ad_campaign_id: null}))),
+    image_url: null, video_url: null, destination_url: null, asset_video_id: null, asset_id: null, ad_id: null, ad_campaign_id: null,
+    asset_pinned_position: asset.asset_role === 'title' ? 'HEADLINE_1' : null, asset_performance_label: null, asset_status: null}))),
   product: rank.map(({name, ...metrics}) => ({image_url: null, product_title: name, variant_title: 'Standard', ...metrics, refund_rate: .032, missing_cost_lines: 0, zero_cost_lines: 0})),
   retention: matrix.slice(-cohorts.length).flatMap((row, i) => dates.slice(0, cohorts.length - i).map((_, month_age) => {
     const cohort_rate = row['rate_month_' + month_age], cohort_value = row['value_month_' + month_age];

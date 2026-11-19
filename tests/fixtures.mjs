@@ -57,7 +57,7 @@ export const paidRows = [paid('total_ad_spend', 'SUM(ad_spend)'), paid('total_ad
 export const foundationTables = [...tables, adTable,
   {id: 9100, name: 'rpt_ad_creative_assets', schema: options.dataset, active: true,
     fields: ['sm_store_id', 'source_system', 'ad_creative_id', 'ad_id', 'ad_campaign_id', 'asset_role', 'asset_text',
-      'asset_image_url', 'asset_video_url', 'asset_video_id', 'asset_id', 'asset_link_url', 'sm_ad_creative_asset_key']
+      'asset_image_url', 'asset_video_url', 'asset_video_id', 'asset_id', 'asset_link_url', 'asset_pinned_position', 'asset_performance_label', 'asset_status', 'sm_ad_creative_asset_key']
       .map((name, i) => column(name, 9101 + i, 'type/Text'))},
   {id: 60, name: 'obt_order_lines', schema: options.dataset, active: true, fields: [
     column('order_processed_at_local_datetime', 61, 'type/DateTime'), column('sm_store_id', 62, 'type/Text'), column('sm_channel', 63, 'type/Text'),
