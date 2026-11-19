@@ -30,6 +30,7 @@ const pick = (metrics, ...aliases) => Object.fromEntries(aliases.map(alias => [a
 
 const SUMMARY = 'rpt_executive_summary_daily';
 const ADS = 'rpt_ad_performance_daily';
+const ASSETS = 'rpt_ad_creative_assets';
 const ORDERS = 'obt_orders';
 const ORDER_LINES = 'obt_order_lines';
 const COHORTS = 'rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters';
@@ -192,6 +193,11 @@ export const questions = [
     requires: {[ADS]: ['ad_creative_id', 'ad_creative_format']},
     description: 'Creatives that started spending in the selection, by the week (Monday start) of their first spend, beside those already running. Shares are of creative spend in the selection.',
     metrics: pick(paidMetrics, 'ad_spend', 'click_through_rate', 'platform_roas')},
+  {key: 'creative_assets', name: 'Current creative assets', table: ASSETS,
+    requires: {[ASSETS]: ['sm_store_id', 'source_system', 'ad_creative_id', 'ad_id', 'ad_campaign_id', 'asset_role', 'asset_text',
+      'asset_image_url', 'asset_video_url', 'asset_video_id', 'asset_id', 'asset_link_url', 'sm_ad_creative_asset_key']},
+    columns: {image_url: image, video_url: {...link, link_text: 'Open video'}, destination_url: link},
+    description: 'One row per published asset. Select a creative in the ranking or filter by asset type. Includes assets without spend and videos whose platform supplies only an ID. Inventory reflects current state across all dates.'},
   {key: 'creatives', name: 'Creatives', table: ADS, date: 'date', settings: changeColors('platform_roas_change'),
     requires: {[ADS]: ['ad_creative_id', 'ad_creative_title', 'ad_creative_name', 'ad_creative_body', 'ad_creative_call_to_action_type',
       'ad_creative_image_url', 'ad_creative_thumbnail_url', 'ad_creative_format', 'ad_creative_post_url', 'ad_creative_facebook_url',
@@ -284,6 +290,7 @@ export const columnTitles = {
   creative_id: 'Creative ID', creative_title: 'Creative', creative_body: 'Body', call_to_action: 'Call to action', ad_url: 'Ad',
   creative_format: 'Format', first_spend: 'First spend', launched: 'Launched', creatives: 'Creatives',
   new_creatives: 'New creatives', platform_roas_change: 'ROAS change',
+  asset_role: 'Asset type', asset_text: 'Copy', video_url: 'Video', destination_url: 'Destination', asset_video_id: 'Video ID', asset_id: 'Asset ID', ad_id: 'Ad ID', creative_key: 'Platform / creative ID',
   image_url: 'Image', channel: 'Channel', name: 'Name',
   impressions: 'Impressions', clicks: 'Clicks', click_through_rate: 'CTR', cost_per_click: 'CPC',
   cost_per_thousand_impressions: 'CPM', platform_conversion_rate: 'Platform CVR', platform_revenue_per_conversion: 'Platform revenue / conversion',
@@ -346,6 +353,7 @@ export const outputDimensions = ['measure_period', 'display_value', 'readout', '
   'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
+  'asset_role', 'asset_text', 'video_url', 'destination_url', 'asset_video_id', 'asset_id', 'ad_id', 'ad_campaign_id',
   'creative_format', 'ad_creative_format', 'first_spend', 'launched', 'launch_week', 'creative_key',
   'breakdown_key', 'country', 'region', 'order_name', 'order_key', 'order_id', 'processed_at', 'created_at', 'cancelled_at',
   'channel', 'sales_channel', 'source_system', 'order_type', 'payment_status', 'is_valid', 'source_medium',
@@ -404,7 +412,8 @@ export function dashboards() {
         layout('creative_new', 0, 18, 6, 4),
         layout('creative_formats', 4, 0, 13, 7, null, [{column: 'creative_format', set: {creative_format: 'creative_format'}}]),
         layout('creative_launches', 4, 13, 11, 7),
-        withFilters(layout('creatives', 11, 0, 24, 12), 'creative_sort', 'min_spend', 'min_conversions')]},
+        withFilters(layout('creatives', 11, 0, 24, 12, null, [{column: 'creative_title', set: {asset_creative: 'creative_key'}}]), 'creative_sort', 'min_spend', 'min_conversions'),
+        withFilters(layout('creative_assets', 23, 0, 24, 12), 'asset_role', 'asset_creative')]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium products',
       description: 'Order-processed-date basis, valid orders: product totals and ranked products or variants against Compare with, with refund rates and cost coverage.',
       tabs: [], cards: [layout('product_totals', 0, 0, 12, 7), layout('product_units', 0, 12, 12, 7),

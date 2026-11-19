@@ -37,6 +37,8 @@ function registry({store, asOf}) {
     {id: 'ad', name: 'Ad name', column: 'ad_name', type: 'string/contains'},
     // The format's display name (foundation/sql/include/creative_format_filter.sql), so the
     // formats table's (none) row, a format a platform left blank, filters like any other.
+    {id: 'asset_role', name: 'Asset type', column: 'asset_role', type: 'string/='},
+    {id: 'asset_creative', name: 'Platform / creative ID', variable: 'text', ...text},
     {id: 'creative_format', name: 'Creative format', variable: 'text', ...text},
     {id: 'paid_metric', name: 'Trend measure', variable: 'text', ...choice([['spend', 'Spend'], ['impressions', 'Impressions'],
       ['clicks', 'Clicks'], ['conversions', 'Platform conversions'], ['revenue', 'Platform revenue'], ['roas', 'Platform ROAS'],
