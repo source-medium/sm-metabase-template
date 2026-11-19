@@ -1,25 +1,11 @@
 WITH selected AS (
   SELECT MIN(date) AS start_date, MAX(date) AS end_date
   FROM `DATASET.rpt_ad_performance_daily`
-  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]] [[AND {{creative_format}}]]
+  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    -- @include creative_format_filter
 ),
 -- @include periods
--- A creative launches on its first day with spend, whichever campaign it ran in, so only
--- the store and ad platform scope this. It looks back a year from the selection; a
--- creative that already spent on the first day of that year started earlier, so its
--- first spend is left blank rather than shown as that day.
-launches AS (
-  SELECT
-    -- @include ad_platform_name
-    AS ad_platform,
-    ad_creative_id AS creative_id,
-    MIN(date) AS first_spend
-  FROM `DATASET.rpt_ad_performance_daily`
-  WHERE ad_creative_id IS NOT NULL AND ad_spend > 0
-    AND date BETWEEN (SELECT DATE_SUB(start_date, INTERVAL 365 DAY) FROM selected) AND (SELECT end_date FROM selected)
-    [[AND {{ad_platform}}]] [[AND {{store}}]]
-  GROUP BY ad_platform, creative_id
-),
+-- @include first_spend
 creatives AS (
   SELECT
     periods.position,
@@ -45,7 +31,8 @@ creatives AS (
   JOIN `DATASET.rpt_ad_performance_daily`
     ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date
   WHERE periods.position IN (1, 2) AND ad_creative_id IS NOT NULL
-    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]] [[AND {{creative_format}}]]
+    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    -- @include creative_format_filter
   GROUP BY periods.position, ad_platform, creative_id
 ),
 compared AS (

@@ -7,11 +7,15 @@ import {questions, dashboards, combinedDashboard} from '../foundation/questions.
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 // A line `-- @include name` stands for foundation/sql/include/name.sql, so SQL that several
-// questions share (comparison periods, shipping locations) has one source.
-function expand(sql, key) {
+// questions share (comparison periods, shipping locations, first spend) has one source. An
+// include may include others; one that reaches itself is refused.
+function expand(sql, key, within = []) {
   return sql.replace(/^[ \t]*-- @include ([a-z_]+)[ \t]*$/gm, (_line, name) => {
-    try { return read(`../foundation/sql/include/${name}.sql`).replace(/\n$/, ''); }
+    if (within.includes(name)) throw new Error(`${key}: foundation/sql/include/${name}.sql includes itself.`);
+    let text;
+    try { text = read(`../foundation/sql/include/${name}.sql`).replace(/\n$/, ''); }
     catch { throw new Error(`${key}: missing foundation/sql/include/${name}.sql.`); }
+    return expand(text, key, [...within, name]);
   });
 }
 

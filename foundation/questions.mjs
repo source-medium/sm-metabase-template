@@ -70,8 +70,6 @@ const heat = prefix => ({'table.column_formatting': [{id: 0, columns: MONTHS.map
   colors: ['#FFFFFF', '#509EE3'], min_type: null, max_type: null, operator: '=', value: '', color: '#509EE3', highlight_row: false}]});
 const ORDER_COLUMNS = ['processed_at', 'order_name', 'store_id', 'channel', 'order_type', 'payment_status', 'is_valid',
   'cart_units', 'net_revenue', 'source_medium', 'country', 'region', 'order_key'];
-const FORMAT_COLUMNS = ['creative_format', 'format_key', 'ad_spend', 'share_of_spend', 'compare_ad_spend', 'ad_spend_change', 'creatives',
-  'platform_roas', 'compare_platform_roas', 'platform_roas_change', 'click_through_rate'];
 const image = {view_as: 'image'};
 const link = {view_as: 'link', link_text: 'Open'};
 
@@ -177,7 +175,7 @@ export const questions = [
       {key: 'creative_count', name: 'Creatives with spend', display: 'scalar', settings: neutralScalar('creatives')},
       {key: 'creative_new', name: 'New creatives', display: 'scalar', settings: neutralScalar('new_creatives')}]},
   {key: 'creative_formats', name: 'Creative formats', table: ADS, date: 'date',
-    settings: {...showing(FORMAT_COLUMNS, FORMAT_COLUMNS.filter(c => c !== 'format_key')), ...changeColors('platform_roas_change')},
+    settings: changeColors('platform_roas_change'),
     requires: {[ADS]: ['ad_creative_id', 'ad_creative_format']},
     description: 'Creative spend and platform results by format against Compare with. Shares are of creative spend in the selection. Select a format to filter the tab by it.',
     metrics: pick(paidMetrics, 'ad_spend', 'click_through_rate', 'platform_roas')},
@@ -272,7 +270,7 @@ export const columnTitles = {
   repeat_orders: 'Repeat purchase orders', repeat_revenue_per_order: 'Repeat revenue / order', repeat_share_of_revenue: 'Repeat / net revenue',
   ad_platform: 'Ad platform', ad_account_id: 'Account ID', ad_campaign_id: 'Campaign ID', campaign_name: 'Campaign',
   creative_id: 'Creative ID', creative_title: 'Creative', creative_body: 'Body', call_to_action: 'Call to action', ad_url: 'Ad',
-  creative_format: 'Format', format_key: 'Format value', first_spend: 'First spend', launched: 'Launched', creatives: 'Creatives',
+  creative_format: 'Format', first_spend: 'First spend', launched: 'Launched', creatives: 'Creatives',
   new_creatives: 'New creatives', platform_roas_change: 'ROAS change',
   image_url: 'Image', channel: 'Channel', name: 'Name',
   impressions: 'Impressions', clicks: 'Clicks', click_through_rate: 'CTR', cost_per_click: 'CPC',
@@ -336,7 +334,7 @@ export const outputDimensions = ['readout', 'comparison_label', 'revenue_words',
   'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
-  'creative_format', 'format_key', 'ad_creative_format', 'first_spend', 'launched',
+  'creative_format', 'ad_creative_format', 'first_spend', 'launched', 'launch_week', 'creative_key',
   'breakdown_key', 'country', 'region', 'order_name', 'order_key', 'order_id', 'processed_at', 'created_at', 'cancelled_at',
   'channel', 'sales_channel', 'source_system', 'order_type', 'payment_status', 'is_valid', 'source_medium',
   'products', 'discount_codes', 'ships_to', 'utm_campaign', 'cancellation_reason', 'evidence_group', 'evidence_source',
@@ -391,7 +389,7 @@ export function dashboards() {
       description: 'Creative spend, formats and launches against Compare with, then each creative. Spend counts ads with a creative ID across all sales channels; results are platform-reported. Ad platform starts clear. Select a format to filter the tab by it.',
       tabs: [], cards: [layout('creative_totals', 0, 0, 6, 4), layout('creative_roas', 0, 6, 6, 4), layout('creative_count', 0, 12, 6, 4),
         layout('creative_new', 0, 18, 6, 4),
-        layout('creative_formats', 4, 0, 13, 7, null, [{column: 'creative_format', set: {creative_format: 'format_key'}}]),
+        layout('creative_formats', 4, 0, 13, 7, null, [{column: 'creative_format', set: {creative_format: 'creative_format'}}]),
         layout('creative_launches', 4, 13, 11, 7),
         withFilters(layout('creatives', 11, 0, 24, 12), 'creative_sort', 'min_spend', 'min_conversions')]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium products',
