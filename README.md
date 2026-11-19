@@ -49,12 +49,12 @@ delivers its tables, so a missing source never hides the others.
 
 | Tab | Questions | Source |
 | --- | --- | --- |
-| Overview | A one-sentence readout of what moved; net revenue, orders, MER, revenue per order and sessions against two comparison periods, and ad spend as a value without one; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel and sub-channel contributions | `rpt_executive_summary_daily` |
+| Overview | A one-sentence readout of what moved; net revenue, orders, MER, revenue per order and sessions against two comparison periods, and ad spend as a value without one; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel contributions | `rpt_executive_summary_daily` |
 | Business review | Revenue and deductions and new vs repeat purchases against the comparison, a business summary by day, week or month, and each store's currency, time zone and latest data date | `rpt_executive_summary_daily`, `dim_stores` |
 | Performance tables | Revenue and orders, marketing efficiency, and new and repeat purchases by day, week or month, plus ad platform delivery and results by period (CPM, CPC, conversion rate) | `rpt_executive_summary_daily`, `rpt_ad_performance_daily` |
 | All stores | One row per store with revenue change and latest data date, never a cross-store total; a store name opens its executive summary | `rpt_executive_summary_daily`, `dim_stores` |
 | Paid marketing | Ad platform economics, a measure over time by platform, spend broken down by platform, campaign, campaign type or tactic against the comparison, and campaigns; a campaign name filters the tab and Creatives | `rpt_ad_performance_daily` |
-| Creatives | The top creatives by a chosen sort with images, minimum spend and conversions | `rpt_ad_performance_daily` |
+| Creatives | Creative spend, platform ROAS, creatives running and new ones against the comparison; spend and ROAS by format (select one to filter the tab) and by launch week; the top creatives by a chosen sort with images, format, first spend, and spend and ROAS changes | `rpt_ad_performance_daily` |
 | Products | Net revenue and units against both comparisons; products or variants ranked by revenue, units, profit or refunds, or the biggest gainers and decliners, with refund rate and cost coverage | `obt_order_lines` |
 | Retention | Rate (monthly retention or second purchase) and value (gross profit LTV or revenue LTR) curves, all twelve cohorts as heat-shaded matrices, optionally for one acquisition segment | `rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters` |
 | Geography | Revenue, orders and mapped coverage against both comparisons, world and US state maps, countries and regions with revenue change, and a daily trend; a country, then a region, scopes the tab and Orders | `obt_orders` |

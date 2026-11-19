@@ -9,7 +9,6 @@ WITH located AS (
     sm_store_id AS store_id,
     -- @include channel_name
     AS channel,
-    sm_sub_channel AS sub_channel,
     sm_order_type AS order_type,
     order_payment_status AS payment_status,
     is_order_sm_valid AS is_valid,
@@ -24,7 +23,6 @@ SELECT
   order_name,
   store_id,
   channel,
-  sub_channel,
   order_type,
   payment_status,
   is_valid,

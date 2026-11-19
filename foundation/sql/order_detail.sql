@@ -3,9 +3,8 @@ SELECT
   order_id,
   order_processed_at_local_datetime AS processed_at,
   order_created_at_local_datetime AS created_at,
-  CONCAT(
   -- @include channel_name
-  , IFNULL(CONCAT(' / ', sm_sub_channel), '')) AS channel,
+  AS channel,
   sm_order_sales_channel AS sales_channel,
   source_system,
   sm_order_type AS order_type,
