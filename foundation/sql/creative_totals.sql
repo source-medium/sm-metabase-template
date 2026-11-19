@@ -9,6 +9,7 @@ WITH selected AS (
 totals AS (
   SELECT
     periods.position,
+    periods.start_date,
     SUM(ad_spend) AS ad_spend,
     SAFE_DIVIDE(SUM(ad_platform_reported_revenue), SUM(ad_spend)) AS platform_roas,
     COUNT(DISTINCT IF(ad_spend > 0,
@@ -27,7 +28,7 @@ totals AS (
   WHERE ad_creative_id IS NOT NULL
     [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
     -- @include creative_format_filter
-  GROUP BY periods.position
+  GROUP BY periods.position, periods.start_date
 )
 SELECT
   selection.* EXCEPT (position),

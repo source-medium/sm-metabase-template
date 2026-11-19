@@ -463,14 +463,14 @@ test('section filters show on their cards, and a filter other tabs read stays in
   };
   assert.deepEqual(inline('dashboard:summary', 'trend'), ['trend_values']);
   assert.deepEqual(inline('dashboard:summary', 'business'), ['grain']);
-  assert.deepEqual(inline('dashboard:paid', 'paid_trend'), ['grain', 'paid_metric']);
-  assert.deepEqual(inline('dashboard:product', 'product'), ['product_group', 'product_rank', 'product_ranking']);
+  assert.deepEqual(inline('dashboard:paid', 'paid_trend'), ['grain']);
+  assert.deepEqual(inline('dashboard:product', 'product'), ['product_group', 'product_ranking']);
   assert.deepEqual(inline('dashboard:orders', 'orders'), ['order_search', 'population']);
   assert.deepEqual(inline('dashboard:summary', 'kpis'), [], 'scope filters stay in the bar');
   // Period drives cards on Business review, Performance tables and Paid marketing, so in the
   // combined dashboard no single card may hold it.
   assert.deepEqual(inline('dashboard:foundation', 'business'), []);
-  assert.deepEqual(inline('dashboard:foundation', 'paid_trend'), ['paid_metric']);
+  assert.deepEqual(inline('dashboard:foundation', 'paid_trend'), []);
   assert.deepEqual(inline('dashboard:foundation', 'trend'), ['trend_values']);
   const combined = m.dashboards.get(installed.ids['dashboard:foundation']);
   assert.ok(combined.parameters.some(p => p.id === 'grain'), 'a filter shown on a card is still the dashboard\'s');

@@ -1,3 +1,6 @@
+import {compileCatalog} from '../src/catalog.mjs';
+import {definitions, foundationSql} from '../src/foundation.mjs';
+
 export const options = {url: 'http://localhost:3031', database: 1, dataset: 'tenant_sm_transformed_v2',
   metadataDataset: 'tenant_sm_metadata', collection: 3, store: 'store-a', asOf: '2026-09-01'};
 
@@ -188,4 +191,12 @@ export function fakeMetabase() {
     actAs: id => {user = id;},
     // What Metabase does on its own: rewrite a dashboard's stored content, leaving no revision.
     rewriteSilently: (id, change) => dashboards.set(id, change(structuredClone(dashboards.get(id))))};
+}
+
+// The offline SQL tests and the visual capture must install the same complete sample catalog.
+export function fixtureFoundation(overrides = {}) {
+  const settings = {...options, store: null, ...overrides};
+  const catalog = compileCatalog(withFormats([...filteredRows, ...paidRows]), foundationTables,
+    settings.dataset, documented(foundationTables, columnFormats));
+  return definitions(catalog, foundationTables, foundationSql(), settings);
 }

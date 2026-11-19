@@ -151,3 +151,9 @@ test('selecting a format, (none) included, filters the tab by the name the forma
     for (const filter of filters) assert.equal(filter[1].replace(/^--.*\n/gm, '').replace(/^\s+/gm, ''), formatName.replace(/^\s+/gm, ''));
   }
 });
+
+test('creative comparison number includes the selected start date in its result', () => {
+  // Metabase 0.65 shows a chart error for smartscalar comparisons without a temporal field.
+  assert.match(normalize(sql.creative_totals), /totals as \( select periods\.position, periods\.start_date,/);
+  assert.match(normalize(sql.creative_totals), /group by periods\.position, periods\.start_date \) select selection\.\* except \(position\)/);
+});
