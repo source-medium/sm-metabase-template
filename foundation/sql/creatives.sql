@@ -70,6 +70,7 @@ SELECT
   creative_body,
   call_to_action,
   ad_url,
+  CONCAT(ad_platform, '/', creative_id) AS creative_key,
   creative_id
 FROM compared
 ORDER BY

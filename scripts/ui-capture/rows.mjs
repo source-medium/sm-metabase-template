@@ -211,7 +211,11 @@ export const rows = {
   creative_formats: creativeGroups(formats, 'creative_format', row => row.creative_format).map(row => ({...row, compare_ad_spend: cents(row.ad_spend/1.09),
     ad_spend_change: .09, compare_platform_roas: 3.25, platform_roas_change: row.platform_roas/3.25-1})),
   creative_launches: creativeGroups(launches, 'launched', row => row.first_spend < dates[0] ? launches[0] : row.first_spend < dates[14] ? launches[1] : launches[2]),
-  creatives: creativeRows,
+  creatives: creativeRows.map(row => ({...row, creative_key: row.ad_platform + '/' + row.creative_id})),
+  creative_assets: creativeRows.flatMap(row => [
+    {asset_role: 'title', asset_text: row.creative_title}, {asset_role: 'body', asset_text: row.creative_body},
+  ].map(asset => ({store_id: 'store-1', ad_platform: row.ad_platform, creative_id: row.creative_id, ...asset,
+    image_url: null, video_url: null, destination_url: null, asset_video_id: null, asset_id: null, ad_id: null, ad_campaign_id: null}))),
   product: rank.map(({name, ...metrics}) => ({image_url: null, product_title: name, variant_title: 'Standard', ...metrics, refund_rate: .032, missing_cost_lines: 0, zero_cost_lines: 0})),
   retention: matrix.slice(-cohorts.length).flatMap((row, i) => dates.slice(0, cohorts.length - i).map((_, month_age) => {
     const cohort_rate = row['rate_month_' + month_age], cohort_value = row['value_month_' + month_age];

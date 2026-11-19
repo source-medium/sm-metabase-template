@@ -92,6 +92,10 @@ test('clicks set filters on the same dashboard, or open another dashboard with i
     assert.deepEqual(click(dashboard, 'stores', 'store_name'),
       {type: 'link', linkType: 'dashboard', targetId: installed.ids['dashboard:summary'], parameterMapping: {store: set('store', 'store_id')}});
   }
+  for (const dashboard of ['dashboard:creatives', 'dashboard:foundation']) {
+    assert.deepEqual(click(dashboard, 'creatives', 'creative_title'),
+      {type: 'crossfilter', parameterMapping: {asset_creative: set('asset_creative', 'creative_key')}});
+  }
   // A filter the dashboard does not have is left out of the click.
   const paid = definition.nodes.find(n => n.key === 'dashboard:paid');
   assert.ok(paid.layout.parameters.some(p => p.id === 'campaign'));
@@ -593,4 +597,17 @@ test('a record from a template that recorded no revision heals on the next apply
     assert.ok(Number.isSafeInteger(marker(m.dashboards.get(installed.ids[key]).description).revision), key);
   }
   assert.ok((await plan(m.api, expanded)).actions.every(a => a.action === 'unchanged'));
+});
+
+
+test('current creative inventory is optional and separate from dated performance', () => {
+  const without = foundationTables.filter(t => t.name !== 'rpt_ad_creative_assets');
+  const definition = definitions(compileCatalog([...rows, ...paidRows], without, options.dataset, documented(without)), without, sql, options);
+  const creatives = definition.nodes.find(n => n.key === 'dashboard:creatives');
+  assert.ok(creatives.layout.cards.some(c => c.key === 'question:creatives'));
+  assert.ok(!creatives.layout.cards.some(c => c.key === 'question:creative_assets'));
+  assert.ok(!creatives.layout.parameters.some(p => p.id === 'asset_creative'));
+  assert.match(sql.creative_assets, /FROM `DATASET.rpt_ad_creative_assets`/);
+  assert.doesNotMatch(sql.creative_assets, /(?:FROM|JOIN) `[^`]*rpt_ad_performance_daily|\{\{date\}\}|ad_spend/i);
+  assert.match(sql.creative_assets, /\{\{store\}\}/);
 });
