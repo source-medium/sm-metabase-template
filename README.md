@@ -61,6 +61,12 @@ delivers its tables, so a missing source never hides the others.
 | Orders | The 500 most recently processed orders, all or only valid, searchable by name, number or ID; an order opens its details and attribution evidence | `obt_orders`, `fct_order_attribution_signals` |
 | Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
 
+On **Creatives**, select an ad to see its current copy, images and video links
+where supplied. The ranking requires a creative ID. Campaign or affiliate spend
+without one still counts in **Paid marketing**. In DemoCo, a platform such as
+Superfiliate can therefore show spend and an empty creative ranking for the same
+dates. [Explore the DemoCo Creatives dashboard](https://metabase-demo.sourcemedium.app/public/dashboard/a2408c3f-e646-48c1-9b72-94a2efef1e13).
+
 Comparisons are modeled on the [App Starter](https://github.com/source-medium/sm-app-template):
 **Compare with** and **Second comparison** choose the previous period, last year,
 the same period last year or the same weekdays last year. The previous period
