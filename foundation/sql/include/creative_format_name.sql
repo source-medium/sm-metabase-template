@@ -1,7 +1,7 @@
 -- The creative format's display name (rpt_ad_performance_daily.ad_creative_format, one
 -- vocabulary across platforms); the App Starter shows the same names
--- (src/features/creatives/filters.ts). Any other value shows as stored. The Creative format
--- filter matches this name (creative_format_filter).
+-- (src/features/creatives/filters.ts). Any other value shows as stored. latest_format names
+-- each creative's format with it, and the Creative format filter matches that name.
 CASE ad_creative_format
   WHEN 'video' THEN 'Video'
   WHEN 'image' THEN 'Image'

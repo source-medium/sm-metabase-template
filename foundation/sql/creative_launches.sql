@@ -2,9 +2,9 @@ WITH selected AS (
   SELECT MIN(date) AS start_date, MAX(date) AS end_date
   FROM `DATASET.rpt_ad_performance_daily`
   WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
-    -- @include creative_format_filter
 ),
 -- @include first_spend
+-- @include latest_format
 -- Each selected row with its creative's launch week (Monday start), or none for a creative
 -- already running before the selection.
 selection_rows AS (
@@ -19,6 +19,9 @@ selection_rows AS (
   FROM `DATASET.rpt_ad_performance_daily`
   JOIN launches
     ON launches.creative_id = ad_creative_id AND launches.ad_platform =
+      -- @include ad_platform_name
+  LEFT JOIN latest_formats
+    ON latest_formats.creative_id = ad_creative_id AND latest_formats.ad_platform =
       -- @include ad_platform_name
   CROSS JOIN selected
   WHERE {{date}} AND ad_creative_id IS NOT NULL

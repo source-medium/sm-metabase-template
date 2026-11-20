@@ -2,10 +2,10 @@ WITH selected AS (
   SELECT MIN(date) AS start_date, MAX(date) AS end_date
   FROM `DATASET.rpt_ad_performance_daily`
   WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
-    -- @include creative_format_filter
 ),
 -- @include periods
 -- @include first_spend
+-- @include latest_format
 totals AS (
   SELECT
     periods.position,
@@ -24,6 +24,9 @@ totals AS (
     ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date
   LEFT JOIN launches
     ON launches.creative_id = ad_creative_id AND launches.ad_platform =
+      -- @include ad_platform_name
+  LEFT JOIN latest_formats
+    ON latest_formats.creative_id = ad_creative_id AND latest_formats.ad_platform =
       -- @include ad_platform_name
   WHERE ad_creative_id IS NOT NULL
     [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]

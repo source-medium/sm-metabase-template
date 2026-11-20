@@ -17,3 +17,4 @@ SELECT store_id, ad_platform, creative_id, asset_role, image_url, video_url, ass
 FROM inventory
 WHERE TRUE [[AND CONCAT(ad_platform, '/', creative_id) = {{asset_creative}}]]
 ORDER BY store_id, ad_platform, creative_id, asset_role, sm_ad_creative_asset_key
+LIMIT 500
