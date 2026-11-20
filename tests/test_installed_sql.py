@@ -34,13 +34,18 @@ def statement(key, *, projection_only=False, **filters):
 
 
 def query(db, key, **filters):
-    # DuckDB starts weeks on Monday and uses printf for percent-style formats.
+    # DuckDB starts weeks on Monday and uses printf for percent-style formats. Its ARRAY_AGG takes
+    # no IGNORE NULLS or LIMIT, so the newest value with one leads a filtered, ordered list instead.
     def duckdb_syntax(node):
         if isinstance(node, exp.WeekStart) and node.this.name == "MONDAY":
             return exp.var("WEEK")
         if isinstance(node, exp.Format):
             pattern = exp.Literal.string(node.this.this.replace("'", ","))
             return exp.Anonymous(this="printf", expressions=[pattern, *node.expressions])
+        if isinstance(node, exp.IgnoreNulls) and isinstance(node.this, exp.ArrayAgg) and isinstance(node.this.this, exp.Limit):
+            ordered = node.this.this.this
+            return exp.Filter(this=exp.ArrayAgg(this=ordered.copy()),
+                              expression=exp.Where(this=ordered.this.copy().is_(exp.null()).not_()))
         return node
 
     result = db.execute(statement(key, **filters).transform(duckdb_syntax).sql("duckdb"))
@@ -126,6 +131,31 @@ class InstalledSql(unittest.TestCase):
         """)
         row, = query(self.db, "creative_totals", campaign="ad_campaign_id = 'selected'")
         self.assertEqual((row["creatives"], row["new_creatives"]), (1, 1))
+
+    def test_a_creative_counts_once_in_its_latest_format(self):
+        # One Meta creative under both platform keys, first published without a format, then as a video.
+        self.db.execute("""
+          CREATE TABLE tenant_sm_transformed_v2.rpt_ad_performance_daily AS
+          SELECT day::date AS date, platform AS source_system, format AS ad_creative_format, creative AS ad_creative_id,
+            'campaign' AS ad_campaign_id, spend AS ad_spend, 0 AS ad_platform_reported_revenue,
+            0 AS ad_platform_reported_conversions, 10 AS ad_clicks, 100 AS ad_impressions,
+            NULL::varchar AS ad_creative_title, creative AS ad_creative_name, NULL::varchar AS ad_creative_body,
+            NULL::varchar AS ad_creative_call_to_action_type, 'http://cdn.example/a.png' AS ad_creative_image_url,
+            'https://cdn.example/a.png' AS ad_creative_thumbnail_url, 'javascript:alert(1)' AS ad_creative_post_url,
+            'https://facebook.example/ad' AS ad_creative_facebook_url, NULL::varchar AS ad_creative_instagram_url
+          FROM (VALUES ('2020-10-12', 'meta_ads', NULL, 'split', 60), ('2020-10-13', 'facebook_ads', 'video', 'split', 40),
+                       ('2020-10-13', 'meta_ads', 'image', 'still', 10)) f(day, platform, format, creative, spend)
+        """)
+        formats = query(self.db, "creative_formats")
+        self.assertEqual([(r["creative_format"], r["ad_spend"], r["creatives"]) for r in formats],
+                         [("Video", 100, 1), ("Image", 10, 1)])
+        video = {"creative_format": "'Video'"}
+        totals, = query(self.db, "creative_totals", **video)
+        self.assertEqual((totals["ad_spend"], totals["creatives"]), (100, 1))
+        self.assertEqual(sum(r["ad_spend"] for r in query(self.db, "creative_launches", **video)), 100)
+        ranked, = query(self.db, "creatives", creative_sort="'spend'", min_spend="0", min_conversions="0", **video)
+        self.assertEqual((ranked["ad_platform"], ranked["creative_format"], ranked["ad_spend"]), ("Meta", "Video", 100))
+        self.assertEqual((ranked["image_url"], ranked["ad_url"]), ("https://cdn.example/a.png", "https://facebook.example/ad"))
 
     def test_default_acquisition_segments(self):
         self.db.execute("""

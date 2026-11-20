@@ -4,11 +4,11 @@ WITH selected AS (
   WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
 ),
 -- @include periods
+-- @include latest_format
 formats AS (
   SELECT
     periods.position,
-    -- @include creative_format_name
-    AS creative_format,
+    latest_formats.creative_format,
     SUM(ad_spend) AS ad_spend,
     COUNT(DISTINCT IF(ad_spend > 0,
       -- @include creative_key
@@ -18,6 +18,9 @@ formats AS (
   FROM periods
   JOIN `DATASET.rpt_ad_performance_daily`
     ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date
+  LEFT JOIN latest_formats
+    ON latest_formats.creative_id = ad_creative_id AND latest_formats.ad_platform =
+      -- @include ad_platform_name
   WHERE periods.position IN (1, 2) AND ad_creative_id IS NOT NULL
     [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
   GROUP BY periods.position, creative_format

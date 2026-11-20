@@ -143,13 +143,31 @@ test('selecting a format, (none) included, filters the tab by the name the forma
   assert.match(formatName, /ELSE IFNULL\(ad_creative_format, '\(none\)'\)\nEND$/, 'a blank format shows as (none)');
   const click = dashboards().flatMap(d => d.cards).find(c => c.key === 'question:creative_formats')?.clicks;
   assert.deepEqual(click, [{column: 'creative_format', set: {creative_format: 'creative_format'}}]);
-  assert.ok(sql.creative_formats.includes(`${formatName}\n    AS creative_format`), 'the clicked column is the format name');
+  assert.match(sql.creative_formats, /periods\.position,\n {4}latest_formats\.creative_format,/, 'the clicked column is the latest format name');
   assert.ok(!sql.creative_formats.includes('{{creative_format}}'), 'the formats table lists every format');
-  for (const key of ['creative_totals', 'creative_launches', 'creatives']) {
-    const filters = [...sql[key].matchAll(/\[\[AND\n\s*([\s\S]*?)\n\s*= \{\{creative_format\}\}\]\]/g)];
-    assert.ok(filters.length >= 2, `${key} filters its selection and its rows`);
-    for (const filter of filters) assert.equal(filter[1].replace(/^--.*\n/gm, '').replace(/^\s+/gm, ''), formatName.replace(/^\s+/gm, ''));
+  for (const key of ['creative_totals', 'creative_launches', 'creatives'])
+    assert.equal(sql[key].match(/\{\{creative_format\}\}/g)?.length, 1, `${key} filters its creatives once, by their latest format`);
+});
+
+test('a creative counts in one format, its latest, and every creative question compares the same dates', () => {
+  const selection = key => sql[key].slice(0, sql[key].indexOf('\n),\n'));
+  for (const key of creativeQuestions) {
+    assert.match(rawSql(key), /^-- @include latest_format$/m, `${key} uses the shared format`);
+    // The format name appears once: inside latest_formats, over each creative's newest published format.
+    assert.equal(sql[key].match(/WHEN 'video' THEN 'Video'/g)?.length, 1, `${key} names no row's own format`);
+    assert.match(sql[key], /ARRAY_AGG\(ad_creative_format IGNORE NULLS ORDER BY date DESC LIMIT 1\)\[SAFE_OFFSET\(0\)\] AS ad_creative_format\n/);
+    assert.ok(!selection(key).includes('creative_format'), `${key} selects its dates before any format`);
+    assert.equal(selection(key), selection('creative_formats'), `${key} and the formats table read the same dates`);
   }
+});
+
+test('creative images and links are HTTPS only, and the unpartitioned inventory returns a bounded list', () => {
+  for (const column of ['ad_creative_image_url', 'ad_creative_thumbnail_url', 'ad_creative_post_url', 'ad_creative_facebook_url', 'ad_creative_instagram_url']) {
+    const uses = sql.creatives.split(column).length - 1;
+    const checked = sql.creatives.split(`IF(STARTS_WITH(${column}, 'https://'), ${column}, NULL)`).length - 1;
+    assert.ok(uses > 0 && uses === 2 * checked, `${column} passes only as an HTTPS link`);
+  }
+  assert.match(sql.creative_assets, /\nLIMIT 500\n?$/);
 });
 
 test('creative comparison number includes the selected start date in its result', () => {
