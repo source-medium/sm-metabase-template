@@ -21,7 +21,11 @@ params = {"date": "date BETWEEN DATE '2020-10-12' AND DATE '2020-10-13'",
 
 def statement(key, *, projection_only=False, **filters):
     variables = params | filters
-    sql = re.sub(r"\[\[.*?\]\]", "", cards[key]["query"], flags=re.S)
+    def optional(block):
+        names = re.findall(r"\{\{(\w+)\}\}", block[1])
+        return block[1] if all(name in variables for name in names) else ""
+
+    sql = re.sub(r"\[\[(.*?)\]\]", optional, cards[key]["query"], flags=re.S)
     def variable(tag):
         return variables.get(tag[1], "NULL") if projection_only else variables[tag[1]]
 
@@ -111,6 +115,17 @@ class InstalledSql(unittest.TestCase):
         self.assertEqual(baseline["period"], "Same period last year")
         self.assertIsNone(baseline["period_net_revenue"])
         self.assertIsNone(baseline["net_revenue_change"])
+
+    def test_new_creatives_require_spend_in_the_selected_campaign(self):
+        self.db.execute("""
+          CREATE TABLE tenant_sm_transformed_v2.rpt_ad_performance_daily AS
+          SELECT DATE '2020-10-12' AS date, 'meta_ads' AS source_system, 'video' AS ad_creative_format,
+            creative AS ad_creative_id, campaign AS ad_campaign_id, spend AS ad_spend, 0 AS ad_platform_reported_revenue
+          FROM (VALUES ('shared', 'selected', 0), ('shared', 'another', 100),
+                       ('launched', 'selected', 50)) f(creative, campaign, spend)
+        """)
+        row, = query(self.db, "creative_totals", campaign="ad_campaign_id = 'selected'")
+        self.assertEqual((row["creatives"], row["new_creatives"]), (1, 1))
 
     def test_default_acquisition_segments(self):
         self.db.execute("""

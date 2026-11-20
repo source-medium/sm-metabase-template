@@ -16,7 +16,7 @@ totals AS (
       -- @include creative_key
       , NULL)) AS creatives,
     -- Read for the selection only: first spend looks back a year from it.
-    COUNT(DISTINCT IF(launches.first_spend BETWEEN periods.start_date AND periods.end_date,
+    COUNT(DISTINCT IF(ad_spend > 0 AND launches.first_spend BETWEEN periods.start_date AND periods.end_date,
       -- @include creative_key
       , NULL)) AS new_creatives
   FROM periods
