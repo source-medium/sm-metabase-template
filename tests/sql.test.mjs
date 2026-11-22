@@ -153,11 +153,22 @@ test('a creative counts in one format, its latest, and every creative question c
   const selection = key => sql[key].slice(0, sql[key].indexOf('\n),\n'));
   for (const key of creativeQuestions) {
     assert.match(rawSql(key), /^-- @include latest_format$/m, `${key} uses the shared format`);
-    // The format name appears once: inside latest_formats, over each creative's newest published format.
+    // The format name appears once: inside latest_formats, over each creative's newest non-blank published format.
     assert.equal(sql[key].match(/WHEN 'video' THEN 'Video'/g)?.length, 1, `${key} names no row's own format`);
-    assert.match(sql[key], /ARRAY_AGG\(ad_creative_format IGNORE NULLS ORDER BY date DESC LIMIT 1\)\[SAFE_OFFSET\(0\)\] AS ad_creative_format\n/);
+    assert.match(
+      sql[key],
+      /ARRAY_AGG\(NULLIF\(TRIM\(ad_creative_format\), ''\) IGNORE NULLS ORDER BY date DESC, NULLIF\(TRIM\(ad_creative_format\), ''\) DESC LIMIT 1\)\[SAFE_OFFSET\(0\)\] AS ad_creative_format\n/,
+    );
     assert.ok(!selection(key).includes('creative_format'), `${key} selects its dates before any format`);
     assert.equal(selection(key), selection('creative_formats'), `${key} and the formats table read the same dates`);
+  }
+});
+
+test('creative ARRAY_AGG lookups use a deterministic tie-breaker on the same date', () => {
+  const matches = [...sql.creatives.matchAll(/ARRAY_AGG\(([\s\S]*?) IGNORE NULLS ORDER BY ([\s\S]*?) LIMIT 1\)/g)];
+  assert.equal(matches.length, 4, 'expected 4 ARRAY_AGG lookups in creatives SQL');
+  for (const [, expr, orderBy] of matches) {
+    assert.equal(normalize(orderBy), normalize(`date DESC, ${expr} DESC`), `deterministic tie-breaker for ${normalize(expr)}`);
   }
 });
 
