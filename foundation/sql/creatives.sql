@@ -12,11 +12,14 @@ creatives AS (
     -- Only HTTPS links, as the assets question allows.
     ARRAY_AGG(COALESCE(IF(STARTS_WITH(ad_creative_image_url, 'https://'), ad_creative_image_url, NULL),
       IF(STARTS_WITH(ad_creative_thumbnail_url, 'https://'), ad_creative_thumbnail_url, NULL))
-      IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS image_url,
+      IGNORE NULLS ORDER BY date DESC,
+        COALESCE(IF(STARTS_WITH(ad_creative_image_url, 'https://'), ad_creative_image_url, NULL),
+          IF(STARTS_WITH(ad_creative_thumbnail_url, 'https://'), ad_creative_thumbnail_url, NULL)) DESC
+      LIMIT 1)[SAFE_OFFSET(0)] AS image_url,
     -- @include ad_platform_name
     AS ad_platform,
     ad_creative_id AS creative_id,
-    COALESCE(MAX(ad_creative_title), ARRAY_AGG(ad_creative_name IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)]) AS creative_title,
+    COALESCE(MAX(ad_creative_title), ARRAY_AGG(ad_creative_name IGNORE NULLS ORDER BY date DESC, ad_creative_name DESC LIMIT 1)[SAFE_OFFSET(0)]) AS creative_title,
     MAX(ad_creative_body) AS creative_body,
     MAX(ad_creative_call_to_action_type) AS call_to_action,
     SUM(ad_spend) AS ad_spend,
@@ -30,7 +33,11 @@ creatives AS (
     ARRAY_AGG(COALESCE(IF(STARTS_WITH(ad_creative_post_url, 'https://'), ad_creative_post_url, NULL),
       IF(STARTS_WITH(ad_creative_facebook_url, 'https://'), ad_creative_facebook_url, NULL),
       IF(STARTS_WITH(ad_creative_instagram_url, 'https://'), ad_creative_instagram_url, NULL))
-      IGNORE NULLS ORDER BY date DESC LIMIT 1)[SAFE_OFFSET(0)] AS ad_url
+      IGNORE NULLS ORDER BY date DESC,
+        COALESCE(IF(STARTS_WITH(ad_creative_post_url, 'https://'), ad_creative_post_url, NULL),
+          IF(STARTS_WITH(ad_creative_facebook_url, 'https://'), ad_creative_facebook_url, NULL),
+          IF(STARTS_WITH(ad_creative_instagram_url, 'https://'), ad_creative_instagram_url, NULL)) DESC
+      LIMIT 1)[SAFE_OFFSET(0)] AS ad_url
   FROM periods
   JOIN `DATASET.rpt_ad_performance_daily`
     ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date

@@ -133,7 +133,8 @@ class InstalledSql(unittest.TestCase):
         self.assertEqual((row["creatives"], row["new_creatives"]), (1, 1))
 
     def test_a_creative_counts_once_in_its_latest_format(self):
-        # One Meta creative under both platform keys, first published without a format, then as a video.
+        # One Meta creative under both platform keys, with a null row, a video row, and a newer whitespace-only
+        # row that must not shadow the video format, plus an all-whitespace creative that resolves to (none).
         self.db.execute("""
           CREATE TABLE tenant_sm_transformed_v2.rpt_ad_performance_daily AS
           SELECT day::date AS date, platform AS source_system, format AS ad_creative_format, creative AS ad_creative_id,
@@ -143,12 +144,14 @@ class InstalledSql(unittest.TestCase):
             NULL::varchar AS ad_creative_call_to_action_type, 'http://cdn.example/a.png' AS ad_creative_image_url,
             'https://cdn.example/a.png' AS ad_creative_thumbnail_url, 'javascript:alert(1)' AS ad_creative_post_url,
             'https://facebook.example/ad' AS ad_creative_facebook_url, NULL::varchar AS ad_creative_instagram_url
-          FROM (VALUES ('2020-10-12', 'meta_ads', NULL, 'split', 60), ('2020-10-13', 'facebook_ads', 'video', 'split', 40),
-                       ('2020-10-13', 'meta_ads', 'image', 'still', 10)) f(day, platform, format, creative, spend)
+          FROM (VALUES ('2020-10-12', 'meta_ads', NULL, 'split', 60), ('2020-10-12', 'facebook_ads', 'video', 'split', 40),
+                       ('2020-10-13', 'meta_ads', '   ', 'split', 0),
+                       ('2020-10-13', 'meta_ads', 'image', 'still', 10),
+                       ('2020-10-13', 'meta_ads', '   ', 'blank', 5)) f(day, platform, format, creative, spend)
         """)
         formats = query(self.db, "creative_formats")
         self.assertEqual([(r["creative_format"], r["ad_spend"], r["creatives"]) for r in formats],
-                         [("Video", 100, 1), ("Image", 10, 1)])
+                         [("Video", 100, 1), ("Image", 10, 1), ("(none)", 5, 1)])
         video = {"creative_format": "'Video'"}
         totals, = query(self.db, "creative_totals", **video)
         self.assertEqual((totals["ad_spend"], totals["creatives"]), (100, 1))
@@ -156,6 +159,8 @@ class InstalledSql(unittest.TestCase):
         ranked, = query(self.db, "creatives", creative_sort="'spend'", min_spend="0", min_conversions="0", **video)
         self.assertEqual((ranked["ad_platform"], ranked["creative_format"], ranked["ad_spend"]), ("Meta", "Video", 100))
         self.assertEqual((ranked["image_url"], ranked["ad_url"]), ("https://cdn.example/a.png", "https://facebook.example/ad"))
+        blank, = query(self.db, "creatives", creative_sort="'spend'", min_spend="0", min_conversions="0", creative_format="'(none)'")
+        self.assertEqual((blank["creative_id"], blank["creative_format"], blank["ad_spend"]), ("blank", "(none)", 5))
 
     def test_default_acquisition_segments(self):
         self.db.execute("""
