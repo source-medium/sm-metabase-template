@@ -356,7 +356,7 @@ export const outputDimensions = ['measure_period', 'display_value', 'readout', '
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
   'asset_pinned_position', 'asset_performance_label', 'asset_status', 'asset_role', 'asset_text', 'video_url', 'destination_url', 'asset_video_id', 'asset_id', 'ad_id', 'ad_campaign_id',
-  'creative_format', 'ad_creative_format', 'first_spend', 'launched', 'launch_week', 'creative_key',
+  'creative_format', 'ad_creative_format', 'format_start_date', 'format_end_date', 'matches_ad', 'first_spend', 'launched', 'launch_week', 'creative_key',
   'breakdown_key', 'country', 'region', 'order_name', 'order_key', 'order_id', 'processed_at', 'created_at', 'cancelled_at',
   'channel', 'sales_channel', 'source_system', 'order_type', 'payment_status', 'is_valid', 'source_medium',
   'products', 'discount_codes', 'ships_to', 'utm_campaign', 'cancellation_reason', 'evidence_group', 'evidence_source',

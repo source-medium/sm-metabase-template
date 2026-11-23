@@ -162,6 +162,20 @@ class InstalledSql(unittest.TestCase):
         blank, = query(self.db, "creatives", creative_sort="'spend'", min_spend="0", min_conversions="0", creative_format="'(none)'")
         self.assertEqual((blank["creative_id"], blank["creative_format"], blank["ad_spend"]), ("blank", "(none)", 5))
 
+    def test_campaign_filters_spend_but_does_not_change_a_creatives_format(self):
+        self.db.execute("""
+          CREATE TABLE tenant_sm_transformed_v2.rpt_ad_performance_daily AS
+          SELECT day::date AS date, 'meta_ads' AS source_system, format AS ad_creative_format,
+            'shared' AS ad_creative_id, campaign AS ad_campaign_id, spend AS ad_spend,
+            0 AS ad_platform_reported_revenue, 0 AS ad_platform_reported_conversions,
+            10 AS ad_clicks, 100 AS ad_impressions
+          FROM (VALUES ('2020-10-05', 'selected', 'image', 30),
+                       ('2020-10-12', 'selected', 'image', 100),
+                       ('2020-10-13', 'other', 'video', 1)) f(day, campaign, format, spend)
+        """)
+        row, = query(self.db, "creative_formats", campaign="ad_campaign_id = 'selected'")
+        self.assertEqual((row["creative_format"], row["ad_spend"], row["compare_ad_spend"]), ("Video", 100, 30))
+
     def test_default_acquisition_segments(self):
         self.db.execute("""
           CREATE TABLE tenant_sm_transformed_v2.rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters AS

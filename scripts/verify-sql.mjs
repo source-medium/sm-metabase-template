@@ -70,9 +70,9 @@ const sql = foundationSql();
 for (const question of questions.filter(q => !values.only || values.only.split(',').includes(q.key))) {
   const query = expand(question, sql[question.key], values);
   const args = ['query', `--project_id=${values.project}`, '--use_legacy_sql=false', '--format=json', '--quiet',
-    values.run ? `--maximum_bytes_billed=${values['max-bytes']}` : '--dry_run', query];
+    values.run ? `--maximum_bytes_billed=${values['max-bytes']}` : '--dry_run'];
   try {
-    const out = execFileSync('bq', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024});
+    const out = execFileSync('bq', args, {input: query, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
     if (values.run) console.log(`ok   ${question.key}: ${JSON.parse(out || '[]').length} rows`);
     else console.log(`ok   ${question.key}: ${/"totalBytesProcessed":\s*"?(\d+)/.exec(out)?.[1] ?? '?'} bytes would be processed`);
   } catch (error) {
