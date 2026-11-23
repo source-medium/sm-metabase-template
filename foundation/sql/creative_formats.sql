@@ -1,8 +1,4 @@
-WITH selected AS (
-  SELECT MIN(date) AS start_date, MAX(date) AS end_date
-  FROM `DATASET.rpt_ad_performance_daily`
-  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
-),
+-- @include creative_selected
 -- @include periods
 -- @include latest_format
 formats AS (
