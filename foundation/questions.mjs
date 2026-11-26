@@ -35,6 +35,8 @@ const ADS = 'rpt_ad_performance_daily';
 const ASSETS = 'rpt_ad_creative_assets';
 const ORDERS = 'obt_orders';
 const ORDER_LINES = 'obt_order_lines';
+// The order-line columns the product questions read beyond the table's always-present ones.
+const PRODUCT_COLUMNS = ['product_variant_id', 'product_variant_title', 'primary_product_image_url', 'order_line_product_cost', 'sku'];
 const COHORTS = 'rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters';
 const DICTIONARY = 'dim_data_dictionary';
 const PROCESSED = 'order_processed_at_local_datetime';
@@ -213,9 +215,13 @@ export const questions = [
     description: 'All products for the selection on the order-processed date, valid orders, against Compare with and Second comparison.',
     variants: [{key: 'product_units', name: 'Product net units', display: 'smartscalar', settings: scalar('units')}]},
   {key: 'product', name: 'Products ranked', table: ORDER_LINES, date: PROCESSED,
-    requires: {[ORDER_LINES]: ['product_variant_id', 'product_variant_title', 'primary_product_image_url', 'order_line_product_cost']},
+    requires: {[ORDER_LINES]: PRODUCT_COLUMNS},
     columns: {image_url: image},
     description: 'The ten products or variants (Group by) with the largest Rank by value, or the biggest gainers or decliners against Compare with. Valid orders by processed date, not refund-event date; refunds are signed positive here. Missing costs differ from legitimate zero costs.'},
+  {key: 'product_explorer', name: 'Products: first 200', table: ORDER_LINES, date: PROCESSED,
+    requires: {[ORDER_LINES]: PRODUCT_COLUMNS},
+    columns: {image_url: image},
+    description: 'Every product or variant (Group by) by Rank by value, largest first, up to the first 200. Find a product keeps those whose product or variant title contains the text, or whose product ID, variant ID or a SKU sold is exactly it, before the 200 are counted. Share of total stays against all products. Valid orders by processed date.'},
   {key: 'retention', name: 'Cohort curves', table: COHORTS,
     description: 'Six cohorts (Chart cohorts) through the As-of month, by age. Rate measure is monthly retention or the share who purchased a second time; Value measure is gross profit or revenue per cohort customer. Compare equal elapsed ages.',
     variants: [
@@ -352,7 +358,7 @@ export const outputFormats = {
 };
 /** Outputs that are labels, dates or identifiers rather than measures. */
 export const outputDimensions = ['measure_period', 'display_value', 'date', 'month', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
-  'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
+  'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'product_id', 'variant_id', 'skus', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
   'asset_pinned_position', 'asset_performance_label', 'asset_status', 'asset_role', 'asset_text', 'video_url', 'destination_url', 'asset_video_id', 'asset_id',
@@ -425,9 +431,10 @@ export function dashboards() {
         withFilters(layout('creatives', 11, 0, 24, 12, null, [{column: 'creative_title', set: {asset_creative: 'creative_key'}}]), 'creative_sort', 'min_spend', 'min_conversions'),
         withFilters(layout('creative_assets', 23, 0, 24, 12), 'asset_role', 'asset_creative')]},
     {key: 'dashboard:product', label: 'Products', name: 'SourceMedium products',
-      description: 'Order-processed-date basis, valid orders: product totals and ranked products or variants against Compare with, with refund rates and cost coverage.',
+      description: 'Order-processed-date basis, valid orders: product totals, the top ten products or variants against Compare with, and the first 200 to search, with refund rates and cost coverage.',
       tabs: [], cards: [layout('product_totals', 0, 0, 12, 7), layout('product_units', 0, 12, 12, 7),
-        withFilters(layout('product', 7, 0, 24, 9), 'product_group', 'product_ranking')]},
+        withFilters(layout('product', 7, 0, 24, 9), 'product_group', 'product_ranking'),
+        withFilters(layout('product_explorer', 16, 0, 24, 12), 'product_search')]},
     {key: 'dashboard:retention', label: 'Retention', name: 'SourceMedium retention',
       description: 'Cohort curves and matrices at an explicit completed-month cutoff, optionally for one acquisition segment. Keep store/channel/cohort identities separate.',
       tabs: [], cards: [withFilters(layout('retention_curve', 0, 0, 12, 7), 'cohorts'),

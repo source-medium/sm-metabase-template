@@ -164,6 +164,8 @@ const deductions = deductionLines(measures.net_revenue), previousDeductions = de
 const comparison = ['Selected period', 'Previous 28 days', 'Same period last year'].map((period, i) => ({period, start_date: ['2026-10-01','2026-09-03','2025-10-01'][i],
     end_date: ['2026-10-28','2026-09-30','2025-10-28'][i], ...Object.fromEntries(['net_revenue','summary_orders','ad_spend','mer'].flatMap(name => [
       ['period_' + name, [measures, previous, lastYear][i][name]], [name + '_change', i ? measures[name] / [measures, previous, lastYear][i][name] - 1 : null]]))}));
+const productRows = rank.map(({name, ...metrics}) => ({image_url: null, product_title: name, variant_title: 'Standard', ...metrics,
+  refund_rate: .032, missing_cost_lines: 0, zero_cost_lines: 0}));
 export const rows = {
   kpis: [{start_date: dates[0], ...measures, ...prefixed('compare_', previous), ...prefixed('compare2_', lastYear)}], product_totals: [compared({net_revenue: 62480.50, units: 1940})],
   comparison,
@@ -217,7 +219,7 @@ export const rows = {
   ].map(asset => ({store_id: 'store-1', ad_platform: row.ad_platform, creative_id: row.creative_id, ...asset,
     image_url: null, video_url: null, destination_url: null, asset_video_id: null, asset_id: null, ads: 1,
     asset_pinned_position: asset.asset_role === 'title' ? 'HEADLINE_1' : null, asset_performance_label: null, asset_status: null}))),
-  product: rank.map(({name, ...metrics}) => ({image_url: null, product_title: name, variant_title: 'Standard', ...metrics, refund_rate: .032, missing_cost_lines: 0, zero_cost_lines: 0})),
+  product: productRows, product_explorer: productRows,
   retention: matrix.slice(-cohorts.length).flatMap((row, i) => dates.slice(0, cohorts.length - i).map((_, month_age) => {
     const cohort_rate = row['rate_month_' + month_age], cohort_value = row['value_month_' + month_age];
     const second_purchase_customers = Math.round(row.cohort_size * .6 * (1 - Math.exp(-month_age / 4)));

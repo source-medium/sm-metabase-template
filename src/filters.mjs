@@ -61,6 +61,7 @@ function registry({store, asOf}) {
       ['gross_profit', 'Product gross profit'], ['refunds', 'Refund amount'], ['refunded_units', 'Refunded units']], 'net_revenue')},
     {id: 'product_ranking', name: 'Ranking', variable: 'text', ...choice([['largest', 'Largest value'], ['gainers', 'Period gainers'],
       ['decliners', 'Period decliners']], 'largest')},
+    {id: 'product_search', name: 'Find a product', variable: 'text', ...text},
     {id: 'acquisition', name: 'Segment cohorts by', variable: 'text', ...choice([['no_filters', 'All acquisition orders'],
       ['order_type_(sub_vs._one_time)', 'First-order type'], ['discount_code', 'Discount code'], ['source/medium', 'Source / medium'],
       ['campaign', 'Campaign'], ['zero_party_attribution', 'Survey attribution']], 'no_filters')},

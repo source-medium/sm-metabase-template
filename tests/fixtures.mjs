@@ -61,7 +61,7 @@ export const foundationTables = [...tables, adTable,
       .map((name, i) => column(name, 9101 + i, 'type/Text'))},
   {id: 60, name: 'obt_order_lines', schema: options.dataset, active: true, fields: [
     column('order_processed_at_local_datetime', 61, 'type/DateTime'), column('sm_store_id', 62, 'type/Text'), column('sm_channel', 63, 'type/Text'),
-    ...['product_variant_id', 'product_variant_title', 'primary_product_image_url'].map((name, i) => column(name, 600 + i, 'type/Text')),
+    ...['product_variant_id', 'product_variant_title', 'primary_product_image_url', 'sku'].map((name, i) => column(name, 600 + i, 'type/Text')),
     column('order_line_product_cost', 610)]},
   {id: 70, name: 'rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters', schema: options.dataset, active: true,
     fields: [column('sm_store_id', 71, 'type/Text'), column('sm_channel', 72, 'type/Text')]},
