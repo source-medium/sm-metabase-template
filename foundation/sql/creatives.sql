@@ -38,7 +38,7 @@ creatives AS (
   JOIN `DATASET.rpt_ad_performance_daily`
     ON `DATASET.rpt_ad_performance_daily`.date BETWEEN periods.start_date AND periods.end_date
   WHERE periods.position IN (1, 2) AND ad_creative_id IS NOT NULL
-    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{campaign_id}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
   GROUP BY periods.position, ad_platform, creative_id
 ),
 compared AS (

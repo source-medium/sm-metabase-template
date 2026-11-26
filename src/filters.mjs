@@ -6,6 +6,8 @@
 // question's own date column). `variable` makes the tag a scalar value the SQL reads;
 // otherwise the column is a Metabase field filter. A Metabase filter is navigation,
 // not a permission boundary.
+import {VALID_SALES_CHANNELS, CHANNEL_NAMES} from '../foundation/questions.mjs';
+
 const choice = (values, fallback) => ({type: 'string/=', sectionId: 'string', required: true, default: [fallback],
   isMultiSelect: false, values_query_type: 'list', values_source_type: 'static-list', values_source_config: {values}});
 const text = {type: 'string/=', sectionId: 'string', isMultiSelect: false};
@@ -17,7 +19,9 @@ const comparisons = [['previous', 'Previous period'], ['last_year', 'Last year']
 function registry({store, asOf}) {
   return [
     {id: 'date', name: 'Date', column: 'date', type: 'date/all-options', default: 'past28days', required: true},
-    {id: 'as_of_month', name: 'As-of month', variable: 'date', type: 'date/single', default: asOf, required: true},
+    // No month: cohorts run through the latest completed month (foundation/sql/include/as_of.sql).
+    // --as-of-month pins one.
+    {id: 'as_of_month', name: 'As-of month', variable: 'date', type: 'date/single', ...(asOf ? {default: asOf, required: true} : {})},
     // sm_channel is the sales channel in every report. In the ad report, source_system is
     // the advertising platform that delivered the ad.
     // No default: every sales channel, as in the App Starter and SourceMedium's AI tools.
@@ -33,6 +37,8 @@ function registry({store, asOf}) {
     {id: 'grain', name: 'Period', variable: 'text', ...choice([['day', 'Day'], ['week', 'Week'], ['month', 'Month']], 'day')},
     {id: 'trend_values', name: 'Trend values', variable: 'text', ...choice([['daily', 'Daily values'], ['cumulative', 'Cumulative values']], 'daily')},
     {id: 'campaign', name: 'Campaign name', column: 'ad_campaign_name', type: 'string/contains'},
+    // The campaign a click selects, exactly; Campaign name stays a search.
+    {id: 'campaign_id', name: 'Campaign ID', column: 'ad_campaign_id', type: 'string/='},
     {id: 'ad_set', name: 'Ad set name', column: 'ad_group_name', type: 'string/contains'},
     {id: 'ad', name: 'Ad name', column: 'ad_name', type: 'string/contains'},
     // The format's display name (foundation/sql/include/creative_format_filter.sql), so the
@@ -59,6 +65,10 @@ function registry({store, asOf}) {
       ['order_type_(sub_vs._one_time)', 'First-order type'], ['discount_code', 'Discount code'], ['source/medium', 'Source / medium'],
       ['campaign', 'Campaign'], ['zero_party_attribution', 'Survey attribution']], 'no_filters')},
     {id: 'segment', name: 'Acquisition segment', variable: 'text', ...text},
+    // Cohorts read one acquisition sales channel, never the shared Channel: clear, the first
+    // valid channel the scoped stores have cohorts for (foundation/sql/include/acquisition.sql).
+    {id: 'acquisition_channel', name: 'Acquisition sales channel', variable: 'text', ...text, values_query_type: 'list',
+      values_source_type: 'static-list', values_source_config: {values: VALID_SALES_CHANNELS.map(c => [c, CHANNEL_NAMES[c]])}},
     {id: 'cohorts', name: 'Chart cohorts', variable: 'text', ...choice([['latest', 'Latest 6'], ['earliest', 'Earliest 6']], 'latest')},
     {id: 'rate', name: 'Rate measure', variable: 'text', ...choice([['retention', 'Monthly retention'],
       ['second_purchase', 'Purchased a second time']], 'retention')},
@@ -91,7 +101,10 @@ export function parameter({column: _column, variable: _variable, ...definition})
   return {slug: definition.id, ...definition};
 }
 
-/** The dashboard parameters for filters any of its questions consume, in registry order. */
+/**
+ * The dashboard parameters for filters any of its questions consume, in registry order. With one
+ * store there is no store to choose: questions keep their Store tag, and --store's default.
+ */
 export function dashboardParameters(ids, options) {
-  return registry(options).filter(f => ids.has(f.id)).map(parameter);
+  return registry(options).filter(f => ids.has(f.id) && !(f.id === 'store' && options.singleStore)).map(parameter);
 }

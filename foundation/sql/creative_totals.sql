@@ -25,7 +25,7 @@ totals AS (
     ON latest_formats.creative_id = ad_creative_id AND latest_formats.ad_platform =
       -- @include ad_platform_name
   WHERE ad_creative_id IS NOT NULL
-    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{campaign_id}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
     -- @include creative_format_filter
   GROUP BY periods.position, periods.start_date
 )

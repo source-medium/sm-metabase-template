@@ -208,7 +208,8 @@ class InstalledSql(unittest.TestCase):
         self.db.execute("""
           CREATE TABLE tenant_sm_transformed_v2.rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters AS
           SELECT 'no_filters' AS acquisition_order_filter_dimension, 'all' AS acquisition_order_filter_dimension_value,
-            'all_orders' AS sm_order_line_type, DATE '2020-10-01' AS cohort_month, 0 AS months_since_first_order, 2 AS cohort_size
+            'all_orders' AS sm_order_line_type, 'online_dtc' AS sm_channel, DATE '2020-10-01' AS cohort_month,
+            0 AS months_since_first_order, 2 AS cohort_size
         """)
         result = query(self.db, "retention_segments", acquisition="'no_filters'", as_of_month="DATE '2020-10-01'")
         self.assertEqual(result, [])

@@ -12,10 +12,12 @@ SELECT
   SUM(ad_platform_reported_conversions) AS platform_conversions,
   SUM(ad_platform_reported_revenue) AS platform_revenue,
   SAFE_DIVIDE(SUM(ad_platform_reported_revenue), SUM(ad_spend)) AS platform_roas,
-  SAFE_DIVIDE(SUM(ad_spend), SUM(ad_platform_reported_conversions)) AS cost_per_platform_conversion
+  SAFE_DIVIDE(SUM(ad_spend), SUM(ad_platform_reported_conversions)) AS cost_per_platform_conversion,
+  -- The Ad platform filter's own value, which a campaign click sets; the table hides it.
+  source_system
 FROM `DATASET.rpt_ad_performance_daily`
 WHERE ad_campaign_id IS NOT NULL
-  AND {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+  AND {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{campaign_id}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
 GROUP BY source_system, ad_account_id, ad_campaign_id
 ORDER BY ad_spend DESC, ad_platform, ad_account_id, ad_campaign_id
 LIMIT 200

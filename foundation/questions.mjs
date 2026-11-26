@@ -12,6 +12,8 @@
  * against contracts/dashboard-metrics-v1 and every summary SQL file against it.
  */
 export const VALID_SALES_CHANNELS = ['online_dtc', 'amazon', 'retail', 'wholesale', 'tiktok_shop'];
+/** Their display names, as foundation/sql/include/channel_name.sql and the App Starter show them. */
+export const CHANNEL_NAMES = {online_dtc: 'Online DTC', amazon: 'Amazon', retail: 'Retail', wholesale: 'Wholesale', tiktok_shop: 'TikTok Shop'};
 
 // Summary metrics shared by the executive questions. Each alias is one output line in
 // the question's SQL, which the installer swaps for the catalog's shared SQL snippet.
@@ -71,6 +73,9 @@ const heat = prefix => ({'table.column_formatting': [{id: 0, columns: MONTHS.map
   colors: ['#509EE310', '#509EE399'], min_type: null, max_type: null, operator: '=', value: '', color: '#509EE3', highlight_row: false}]});
 const ORDER_COLUMNS = ['processed_at', 'order_name', 'store_id', 'channel', 'order_type', 'payment_status', 'is_valid',
   'cart_units', 'net_revenue', 'source_medium', 'country', 'region', 'order_key'];
+const CAMPAIGN_COLUMNS = ['ad_platform', 'ad_account_id', 'ad_campaign_id', 'campaign_name', 'ad_spend', 'impressions', 'clicks',
+  'click_through_rate', 'cost_per_click', 'platform_conversions', 'platform_revenue', 'platform_roas', 'cost_per_platform_conversion',
+  'source_system'];
 const image = {view_as: 'image'};
 const link = {view_as: 'link', link_text: 'Open'};
 
@@ -88,6 +93,7 @@ const link = {view_as: 'link', link_text: 'Open'};
  * - `requires` lists other tables the SQL joins, with the columns it reads; a question
  *   whose tables are not synced is reported unavailable instead of failing in Metabase.
  * - `variants` are extra cards on the same SQL with another visualization.
+ * - `several` content compares stores; a warehouse with one store does not install it.
  * - `columns` sets column display (an image or link) by output name.
  */
 export const questions = [
@@ -97,13 +103,9 @@ export const questions = [
     variants: [
       {key: 'kpi_orders', name: 'Orders', display: 'smartscalar', settings: scalar('summary_orders')},
       {key: 'kpi_spend', name: 'Ad spend', display: 'scalar', settings: neutralScalar('ad_spend')},
-      {key: 'kpi_mer', name: 'Marketing efficiency (MER)', display: 'smartscalar', settings: scalar('mer')},
+      {key: 'kpi_mer', name: 'MER', display: 'smartscalar', settings: scalar('mer')},
       {key: 'kpi_order_value', name: 'Revenue per order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
       {key: 'kpi_sessions', name: 'Website sessions', display: 'smartscalar', settings: scalar('sessions')}]},
-  {key: 'readout', name: 'Summary', table: SUMMARY, date: 'date', display: 'object',
-    description: 'One sentence on the selected dates against Compare with: net revenue, then whether ad spend moved and what that did to marketing efficiency, as the App Starter writes it. Money has no symbol, as in every card here.',
-    // Its title stays on this card: a shared column title would touch every installed card.
-    columns: {readout: {column_title: 'What moved'}}, metrics: pick(summaryMetrics, 'net_revenue', 'ad_spend', 'mer')},
   {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change', 'summary_orders_change', 'mer_change'),
     description: 'The selected dates against Compare with and Second comparison. Previous period follows the selection: one day compares with the same weekday a week earlier, a calendar month, quarter or year with the one before, other ranges with the days just before. Periods run from the first to the last selected date with summary rows; Change is the selected period divided by the comparison period, minus one.',
     metrics: pick(summaryMetrics, 'net_revenue', 'summary_orders', 'ad_spend', 'mer')},
@@ -147,7 +149,7 @@ export const questions = [
   {key: 'store_context', name: 'Reporting context', table: 'dim_stores',
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'store_timezone'], [SUMMARY]: ['sm_store_id', 'date']},
     description: 'Each store\'s reporting currency and time zone, and its latest date with summary rows. Dates are calendar dates in the store\'s time zone; the latest day may be incomplete.'},
-  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', settings: {...changeColors('net_revenue_change'),
+  {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', several: true, settings: {...changeColors('net_revenue_change'),
       ...showing(['store_name', 'net_revenue', 'net_revenue_change', 'store_currency', 'summary_orders', 'ad_spend', 'mer',
         'net_revenue_per_summary_order', 'latest_date', 'brand_name', 'logo_url', 'store_id'])},
     requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'brand_name', 'store_logo_url']},
@@ -172,7 +174,7 @@ export const questions = [
     variants: [{key: 'paid_breakdown_chart', name: 'Spend by breakdown', display: 'row',
       settings: {'graph.dimensions': ['name'], 'graph.metrics': ['ad_spend'], 'graph.x_axis.title_text': 'Break down spend by',
         'graph.y_axis.title_text': 'Ad spend'}}]},
-  {key: 'paid_campaign', name: 'Campaigns', table: ADS, date: 'date',
+  {key: 'paid_campaign', name: 'Campaigns', table: ADS, date: 'date', settings: showing(CAMPAIGN_COLUMNS, CAMPAIGN_COLUMNS.slice(0, -1)),
     description: 'The 200 campaigns with the most spend. Campaign identity includes platform, account and campaign ID; platform-reported attribution and conversions. Select a campaign name to filter by it.',
     metrics: {...pick(paidMetrics, 'ad_spend', 'impressions', 'clicks', 'click_through_rate', 'platform_conversions', 'platform_revenue',
       'platform_roas', 'cost_per_platform_conversion'), cost_per_click: ['total_ad_spend', 'total_ad_clicks']}},
@@ -326,8 +328,6 @@ export const columnTitles = {
 // compare2_<column> display like <column>; tests/formats.test.mjs requires every output
 // to be one of these or a dimension, so a new column cannot ship unformatted.
 export const outputFormats = {
-  // The readout's working values (foundation/sql/readout.sql).
-  selected_revenue: 'currency', selected_mer: 'ratio', previous_mer: 'ratio', revenue_move: 'number', spend_move: 'number',
   gross_revenue: 'currency', net_revenue: 'currency', new_revenue: 'currency', repeat_revenue: 'currency',
   net_revenue_per_summary_order: 'currency', net_revenue_per_order: 'currency', amount: 'currency', amount_difference: 'currency',
   gross: 'currency', net: 'currency', discounts: 'currency', refunds: 'currency', refund_amount: 'currency',
@@ -351,7 +351,7 @@ export const outputFormats = {
   ...Object.fromEntries(MONTHS.flatMap(m => [[`rate_month_${m}`, 'percent'], [`value_month_${m}`, 'currency']])),
 };
 /** Outputs that are labels, dates or identifiers rather than measures. */
-export const outputDimensions = ['measure_period', 'display_value', 'readout', 'comparison_label', 'revenue_words', 'spend_words', 'efficiency_words', 'date', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
+export const outputDimensions = ['measure_period', 'display_value', 'date', 'month', 'day', 'period', 'period_start', 'first_date', 'last_date', 'item', 'measure', 'label',
   'kind', 'mode', 'purchase_type', 'ad_platform', 'line', 'campaign_name', 'product_title', 'variant_title', 'product_key', 'cohort',
   'cohort_month', 'start_date', 'end_date', 'comparison_date', 'store_id', 'store_name', 'store_currency', 'brand_name', 'logo_url',
   'time_zone', 'latest_date', 'creative_id', 'creative_title', 'creative_body', 'call_to_action', 'ad_url', 'image_url', 'name',
@@ -371,28 +371,34 @@ const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) 
 // as the App Starter puts section controls in their section's header. Scope filters (Date,
 // Store, Channel, the comparisons, Ad platform, names) stay in the bar.
 const withFilters = (card, ...filters) => ({...card, filters});
+// A click that opens another dashboard can carry this dashboard's current filter values.
+const current = (...ids) => Object.fromEntries(ids.map(id => [id, {parameter: id}]));
 
 /**
  * The dashboards. Each is installed on its own and as tabs of the combined foundation
  * dashboard, in this order. A dashboard whose questions are unavailable is skipped
  * without hiding the others. `label` names its tab in the combined dashboard when it
  * has no tabs of its own. A card's `clicks` make a column clickable: it sets dashboard
- * filters from the clicked row, on this dashboard or on the one `dashboard` names (which
- * must come earlier in this list). `withFilters` shows a card's own section filters on it;
- * a filter cards on other tabs also read stays in the bar (src/foundation.mjs).
+ * filters from the clicked row, or from this dashboard's own filters (`current`), on this
+ * dashboard or on the one `dashboard` names (which must come earlier in this list).
+ * `withFilters` shows a card's own section filters on it; a filter cards on other tabs also
+ * read stays in the bar (src/foundation.mjs). A `several` dashboard compares stores and is
+ * left out of a warehouse with one store, which also shows no Store filter.
  */
 export function dashboards() {
   return [
     {key: 'dashboard:summary', name: 'SourceMedium executive summary',
       description: 'Summary-system KPIs, every sales channel by default, against Compare with and Second comparison. Use one reporting currency and consistent calendars. Shared SQL snippets and visual-builder metrics use the same catalog definitions.',
       tabs: ['Overview', 'Business review'], cards: [
-        layout('readout', 0, 0, 24, 3, 0),
-        layout('kpis', 3, 0, 8, 7, 0), layout('kpi_orders', 3, 8, 8, 7, 0), layout('kpi_spend', 3, 16, 8, 7, 0),
-        layout('kpi_mer', 10, 0, 8, 7, 0), layout('kpi_order_value', 10, 8, 8, 7, 0), layout('kpi_sessions', 10, 16, 8, 7, 0),
-        layout('comparison_measures', 17, 0, 24, 9, 0), withFilters(layout('trend', 26, 0, 24, 7, 0), 'trend_values'),
-        layout('trend_orders', 33, 0, 8, 5, 0), layout('trend_order_value', 33, 8, 8, 5, 0), layout('trend_spend', 33, 16, 8, 5, 0),
-        layout('trend_mer', 38, 0, 12, 5, 0), layout('trend_sessions', 38, 12, 12, 5, 0),
-        layout('revenue_changes', 43, 0, 24, 5, 0), layout('contributions', 48, 0, 24, 8, 0),
+        // The headline numbers, then the trend, so both show without scrolling; what moved follows.
+        layout('kpis', 0, 0, 6, 4, 0), layout('kpi_orders', 0, 6, 6, 4, 0), layout('kpi_spend', 0, 12, 6, 4, 0),
+        layout('kpi_mer', 0, 18, 6, 4, 0), withFilters(layout('trend', 4, 0, 24, 7, 0), 'trend_values'),
+        layout('revenue_changes', 11, 0, 24, 5, 0), layout('contributions', 16, 0, 24, 8, 0),
+        layout('kpi_order_value', 24, 0, 12, 4, 0), layout('kpi_sessions', 24, 12, 12, 4, 0),
+        // Tall enough for all twelve measure and period rows.
+        layout('comparison_measures', 28, 0, 24, 12, 0),
+        layout('trend_orders', 40, 0, 8, 5, 0), layout('trend_order_value', 40, 8, 8, 5, 0), layout('trend_spend', 40, 16, 8, 5, 0),
+        layout('trend_mer', 45, 0, 12, 5, 0), layout('trend_sessions', 45, 12, 12, 5, 0),
         withFilters(layout('business', 0, 0, 24, 9, 1), 'grain'),
         layout('deductions', 9, 0, 10, 7, 1), layout('purchase_mix', 9, 10, 14, 7, 1),
         layout('store_context', 16, 0, 24, 4, 1)]},
@@ -400,14 +406,16 @@ export function dashboards() {
       description: 'Summary and platform measures by Day, Week or Month (Period), with the selected period total first.',
       tabs: [], cards: [layout('business_revenue', 0, 0, 24, 9), layout('business_efficiency', 9, 0, 24, 9),
         layout('business_purchases', 18, 0, 24, 9), layout('platform_periods', 27, 0, 24, 9)]},
-    {key: 'dashboard:stores', label: 'All stores', name: 'SourceMedium all stores',
+    {key: 'dashboard:stores', label: 'All stores', name: 'SourceMedium all stores', several: true,
       description: 'Each store on its own row for the selected dates and channel. No cross-store totals: compare stores that share a currency.',
-      tabs: [], cards: [layout('stores', 0, 0, 24, 8, null, [{column: 'store_name', dashboard: 'dashboard:summary', set: {store: 'store_id'}}])]},
+      tabs: [], cards: [layout('stores', 0, 0, 24, 8, null, [{column: 'store_name', dashboard: 'dashboard:summary',
+        set: {store: 'store_id', ...current('date', 'channel', 'compare', 'compare2')}}])]},
     {key: 'dashboard:paid', label: 'Paid marketing', name: 'SourceMedium paid marketing',
       description: 'Platform-attributed economics by advertising platform (source_system), across all sales channels. Ad platform starts clear.',
       tabs: [], cards: [layout('paid_channel', 0), withFilters(layout('paid_trend', 6, 0, 24, 7), 'grain'),
         layout('paid_breakdown_chart', 13, 0, 12, 7),
-        layout('paid_breakdown', 13, 12, 12, 7), layout('paid_campaign', 20, 0, 24, 10, null, [{column: 'campaign_name', set: {campaign: 'campaign_name'}}])]},
+        layout('paid_breakdown', 13, 12, 12, 7), layout('paid_campaign', 20, 0, 24, 10, null,
+          [{column: 'campaign_name', set: {campaign_id: 'ad_campaign_id', ad_platform: 'source_system'}}])]},
     {key: 'dashboard:creatives', label: 'Creatives', name: 'SourceMedium creatives',
       description: 'Creative spend, formats and launches against Compare with, then each creative. Spend counts ads with a creative ID across all sales channels; results are platform-reported. Ad platform starts clear. Select a format to filter the tab by it.',
       tabs: [], cards: [layout('creative_totals', 0, 0, 6, 4), layout('creative_roas', 0, 6, 6, 4), layout('creative_count', 0, 12, 6, 4),

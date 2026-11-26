@@ -9,7 +9,7 @@ WITH measures AS (
     SUM(ad_platform_reported_conversions) AS platform_conversions,
     SUM(ad_platform_reported_revenue) AS platform_revenue
   FROM `DATASET.rpt_ad_performance_daily`
-  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+  WHERE {{date}} [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{campaign_id}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
   GROUP BY period, ad_platform
 ),
 ranked AS (

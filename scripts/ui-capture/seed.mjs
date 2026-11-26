@@ -70,7 +70,7 @@ export async function seed(origin, password) {
     native.query = 'SELECT * FROM (' + sampleQuery(recipe.key) + ') AS sample_rows WHERE TRUE\n' + clauses.join('\n');
     native['template-tags'] = tags;
     const card = await api('POST', 'card', body);
-    if (key === 'question:readout') {
+    if (key === 'question:kpis') {
       const result = await api('POST', 'card/' + card.id + '/query', {parameters: []});
       if (result.error) throw new Error('Fixture query: ' + result.error + ' ' + String(JSON.stringify(result.via?.map(e => e.message))).slice(0,500));
     }

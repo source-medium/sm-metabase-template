@@ -1,9 +1,12 @@
+-- @include acquisition
 -- Cohort cells at the As-of month cutoff: the 12 acquisition months through it, ages 0 to
--- 11 that have fully elapsed. With an acquisition segment chosen, cohorts are that
--- segment's customers; without one, every acquisition order counts.
-cohort_cells AS (
+-- 11 that have fully elapsed, for the acquisition sales channel. With an acquisition segment
+-- chosen, cohorts are that segment's customers; without one, every acquisition order counts.
+-- Stores stay apart: they can report in different currencies.
+store_cells AS (
   SELECT
-    CONCAT(FORMAT_DATE('%Y-%m', cohort_month), ' / ', sm_store_id, ' / ', COALESCE(sm_channel, '(none)')) AS cohort,
+    sm_store_id,
+    sm_channel,
     cohort_month,
     months_since_first_order AS month_age,
     SUM(cohort_size) AS cohort_size,
@@ -20,9 +23,19 @@ cohort_cells AS (
       OR ((FALSE [[OR {{segment}} IS NOT NULL]]) AND acquisition_order_filter_dimension = {{acquisition}}
         [[AND acquisition_order_filter_dimension_value = {{segment}}]])
     )
-    AND cohort_month BETWEEN DATE_SUB(DATE_TRUNC({{as_of_month}}, MONTH), INTERVAL 11 MONTH) AND DATE_TRUNC({{as_of_month}}, MONTH)
+    AND cohort_month BETWEEN DATE_SUB((SELECT month FROM as_of), INTERVAL 11 MONTH) AND (SELECT month FROM as_of)
     AND months_since_first_order BETWEEN 0 AND 11
-    AND DATE_ADD(cohort_month, INTERVAL months_since_first_order MONTH) <= DATE_TRUNC({{as_of_month}}, MONTH)
-    [[AND {{channel}}]] [[AND {{store}}]]
+    AND DATE_ADD(cohort_month, INTERVAL months_since_first_order MONTH) <= (SELECT month FROM as_of)
+    AND sm_channel = (SELECT channel FROM acquisition)
+    [[AND {{store}}]]
   GROUP BY sm_store_id, sm_channel, cohort_month, month_age
+),
+-- "May 2026 · Online DTC", naming the store too when several are in scope.
+cohort_cells AS (
+  SELECT
+    CONCAT(FORMAT_DATE('%B %Y', cohort_month), ' · ',
+      -- @include channel_name
+      , IF((SELECT COUNT(DISTINCT sm_store_id) FROM store_cells) > 1, CONCAT(' · ', sm_store_id), '')) AS cohort,
+    store_cells.* EXCEPT (sm_store_id, sm_channel)
+  FROM store_cells
 ),

@@ -32,7 +32,8 @@ if (!values.project || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(values.dataset ?? '') ||
   process.exit(2);
 }
 const literal = value => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
-const asOf = values['as-of-month'] || `${values.to.slice(0, 7)}-01`;
+// Without --as-of-month the cohorts roll to the latest completed month, as an install does.
+const asOf = values['as-of-month'] || null;
 
 const settings = Object.fromEntries(values.set.map(pair => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
 
@@ -48,7 +49,7 @@ function expand(question, sql, {dataset, store, channel, from, to}) {
   for (const filter of filtersIn(sql, {store, asOf})) {
     const value = settings[filter.id] ?? (Array.isArray(filter.default) ? filter.default[0] : filter.default);
     if (filter.id === 'date') tags.date = `CAST(${column(question.date)} AS DATE) BETWEEN DATE ${literal(from)} AND DATE ${literal(to)}`;
-    else if (filter.id === 'as_of_month') tags.as_of_month = `DATE ${literal(settings.as_of_month ?? asOf)}`;
+    else if (filter.id === 'as_of_month') { if (settings.as_of_month ?? asOf) tags.as_of_month = `DATE ${literal(settings.as_of_month ?? asOf)}`; }
     else if (filter.id === 'channel') tags.channel = `${column('sm_channel')} = ${literal(settings.channel ?? channel)}`;
     else if (filter.id === 'store') tags.store = `${column('sm_store_id')} = ${literal(store)}`;
     else if (value === undefined) continue;
@@ -60,7 +61,7 @@ function expand(question, sql, {dataset, store, channel, from, to}) {
     if (!tags[tag]) throw new Error(`${question.key}: required filter ${tag} has no test value.`);
     return tags[tag];
   });
-  return fill(sql.replaceAll('METADATA', values['metadata-dataset']).replaceAll('DATASET', dataset)
+  return fill(sql.replaceAll('METADATA', values['metadata-dataset']).replaceAll('DATASET', dataset).replaceAll('REPORTING_TIME_ZONE', 'UTC')
     .replace(/\[\[([\s\S]*?)\]\]/g, (_m, clause) =>
       [...clause.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].every(m => tags[m[1]]) ? clause : ''));
 }

@@ -186,3 +186,29 @@ test('creative comparison number includes the selected start date in its result'
   assert.match(normalize(sql.creative_totals), /totals as \( select periods\.position, periods\.start_date,/);
   assert.match(normalize(sql.creative_totals), /group by periods\.position, periods\.start_date \) select selection\.\* except \(position\)/);
 });
+
+test('cohorts read their own acquisition sales channel, never the shared Channel, and roll without a month', async () => {
+  const {fixtureFoundation} = await import('./fixtures.mjs');
+  const retention = ['retention', 'retention_matrix', 'retention_segments'];
+  for (const key of retention) {
+    const ids = filtersIn(sql[key], options).map(f => f.id);
+    assert.ok(ids.includes('acquisition_channel') && !ids.includes('channel'), key);
+    // Without a chosen channel, the first valid one the scoped stores have, in the catalog's order.
+    assert.match(normalize(sql[key]), new RegExp(`sm_channel in \\(${VALID_SALES_CHANNELS.map(c => `'${c}'`).join(', ')}\\)`), key);
+    assert.match(sql[key], /COALESCE\(\[\[\{\{as_of_month\}\},\]\] DATE_SUB\(CURRENT_DATE\('REPORTING_TIME_ZONE'\), INTERVAL 1 MONTH\)\)/, key);
+  }
+  const card = (settings, key) => fixtureFoundation(settings).nodes.find(n => n.key === `question:${key}`).body(new Map());
+  const month = settings => card(settings, 'retention').dataset_query.native['template-tags'].as_of_month;
+  // No month: an optional filter, so the cutoff moves on each month; --as-of-month pins one.
+  assert.equal(month({asOf: null}).required, false);
+  assert.equal(month({asOf: null}).default, undefined);
+  assert.deepEqual([month({asOf: '2026-09-01'}).required, month({asOf: '2026-09-01'}).default], [true, '2026-09-01']);
+  // The latest completed month follows the reporting store's calendar, UTC without one.
+  assert.match(card({}, 'retention').dataset_query.native.query, /CURRENT_DATE\('UTC'\)/);
+  assert.match(card({timeZone: 'America/Chicago'}, 'retention').dataset_query.native.query, /CURRENT_DATE\('America\/Chicago'\)/);
+  const layout = fixtureFoundation().nodes.find(n => n.key === 'dashboard:retention').layout;
+  assert.ok(layout.parameters.some(p => p.id === 'acquisition_channel') && !layout.parameters.some(p => p.id === 'channel'));
+  // Labels name the month and channel, and the store only when several are in scope.
+  assert.match(sql.retention, /FORMAT_DATE\('%B %Y', cohort_month\), ' · ',/);
+  assert.match(sql.retention, /IF\(\(SELECT COUNT\(DISTINCT sm_store_id\) FROM store_cells\) > 1, CONCAT\(' · ', sm_store_id\), ''\)\) AS cohort/);
+});

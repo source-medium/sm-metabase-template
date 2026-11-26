@@ -19,4 +19,4 @@ SELECT
   IF({{value}} = 'ltr', lifetime_revenue_per_customer, gross_profit_lifetime_value) AS cohort_value
 FROM ranked
 WHERE cohort_rank <= 6
-ORDER BY cohort, month_age
+ORDER BY cohort_month, cohort, month_age

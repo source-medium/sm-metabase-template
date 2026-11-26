@@ -94,6 +94,12 @@ Store, Channel, the comparisons, Ad platform, names) stay in the dashboard's fil
 bar. A filter is the dashboard's whatever card shows it, so in the combined
 dashboard one that cards on another tab also read (Period) stays in the bar.
 
+Retention cards read the Acquisition sales channel, not the shared Channel: a
+cohort belongs to the channel of its first order, a different scope. A plan from
+a release before this one lists the dropped Channel mapping as a change to the
+retention cards and dashboards. Your own dashboards keep the mappings you made;
+remap a retention card's Channel to Acquisition sales channel there yourself.
+
 ## Remove something
 
 Delete its entry (and SQL file). The next plan lists the removed object under

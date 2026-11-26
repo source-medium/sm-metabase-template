@@ -3,6 +3,7 @@ WITH
 cells AS (
   SELECT
     cohort,
+    cohort_month,
     cohort_size,
     month_age,
     IF({{rate}} = 'second_purchase', second_purchase_rate, retention_rate) AS rate,
@@ -38,4 +39,4 @@ SELECT
   MAX(IF(month_age = 11, value, NULL)) AS value_month_11
 FROM cells
 GROUP BY cohort
-ORDER BY cohort
+ORDER BY MIN(cohort_month), cohort

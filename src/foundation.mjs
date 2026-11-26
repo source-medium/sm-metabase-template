@@ -29,17 +29,22 @@ export function foundationSql() {
   }));
 }
 
-// Clicking a column sets dashboard filters from the clicked row: on this dashboard, or on
-// the dashboard a click opens. A filter the destination does not have is left out, and a
-// click with nothing left to set does nothing.
+// Clicking a column sets dashboard filters from the clicked row, or from a filter's current
+// value on this dashboard ({parameter: id}): on this dashboard, or on the dashboard a click
+// opens. A filter the destination (or, for a current value, this dashboard) does not have is
+// left out, and a click with nothing left to set does nothing.
 function clickSettings(card, parameters, layouts, ids) {
   const column_settings = {};
+  const sourceOf = from => typeof from === 'string' ? {type: 'column', id: from, name: from} :
+    parameters.some(p => p.id === from.parameter) ?
+      {type: 'parameter', id: from.parameter, name: parameters.find(p => p.id === from.parameter).name} : null;
   for (const click of card.clicks || []) {
     const target = click.dashboard && layouts.find(l => l.key === click.dashboard);
     if (click.dashboard && !target) continue;
     const available = (target || {parameters}).parameters;
-    const parameterMapping = Object.fromEntries(Object.entries(click.set).filter(([id]) => available.some(p => p.id === id))
-      .map(([id, column]) => [id, {id, source: {type: 'column', id: column, name: column}, target: {type: 'parameter', id}}]));
+    const parameterMapping = Object.fromEntries(Object.entries(click.set)
+      .map(([id, from]) => [id, sourceOf(from)]).filter(([id, source]) => source && available.some(p => p.id === id))
+      .map(([id, source]) => [id, {id, source, target: {type: 'parameter', id}}]));
     if (!Object.keys(parameterMapping).length) continue;
     column_settings[JSON.stringify(['name', click.column])] = {click_behavior: target ?
       {type: 'link', linkType: 'dashboard', targetId: ids.get(click.dashboard) || 0, parameterMapping} :
@@ -107,7 +112,10 @@ export function definitions(catalog, tables, sql, options) {
       description: `Canonical metric ${metric.name}, source ${metric.table}, time ${metric.time}. Generated from the warehouse catalog; use on this source table.`})});
   }
   const uses = new Map();
-  for (const question of questions) {
+  // Content that compares stores (`several`) is left out of a warehouse with one store: not a
+  // limitation to report, just nothing to compare.
+  const shown = item => !(item.several && options.singleStore);
+  for (const question of questions.filter(shown)) {
     const dataset = question.metadata ? options.metadataDataset : options.dataset;
     const table = tables.find(t => t.schema === dataset && t.name === question.table && t.active !== false);
     const missing = missingSource(question, tables, dataset);
@@ -131,7 +139,7 @@ export function definitions(catalog, tables, sql, options) {
   // A dashboard leaves out cards whose questions are unavailable (reported above) and tabs
   // left empty, and is skipped only when nothing is left. It shows the filters its cards consume.
   const available = [];
-  for (const layout of dashboards(options)) {
+  for (const layout of dashboards(options).filter(shown)) {
     const kept = layout.cards.filter(c => uses.has(c.key));
     if (!kept.length) { unavailable.push({name: layout.name, reason: 'None of its questions are available.'}); continue; }
     const tabs = layout.tabs.filter((_, i) => kept.some(c => c.tab === i));
