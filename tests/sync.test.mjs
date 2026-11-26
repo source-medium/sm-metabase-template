@@ -47,15 +47,15 @@ test('comparison numbers use their own value for the empty state and preserve sh
   assert.ok(stable.actions.every(a => a.action === 'unchanged'));
 });
 
-test('the twelve-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
+test('the eleven-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
   const m = fakeMetabase();
   const definition = full();
   assert.deepEqual(definition.unavailable, []);
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Start here', 'Overview', 'Business review', 'Performance tables', 'All stores',
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables', 'All stores',
     'Paid marketing', 'Creatives', 'Products', 'Retention', 'Geography', 'Orders', 'Data']);
-  const placed = dashboards().flatMap(d => d.cards).length;
+  const placed = dashboards().filter(d => d.combined !== false).flatMap(d => d.cards).length;
   assert.equal(dashboard.dashcards.length, placed);
   assert.equal(new Set(dashboard.dashcards.map(c => c.card_id)).size, placed);
   for (const placement of dashboard.dashcards) {
@@ -162,7 +162,7 @@ test('a stale ownership record on a dashboard that matches its definition is ref
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
 });
 
-test('Start here leads the foundation and opens each preset\'s dashboard with its filters, leaving out what is unavailable', async () => {
+test('Start here is its own dashboard and opens each preset\'s dashboard with its filters, leaving out what is unavailable', async () => {
   // The IDs are shared with the App Starter's presets (smstack specs/26q4/template-reports-spec.md §6.1).
   assert.deepEqual(presets.map(p => p.id), ['weekly-review', 'monthly-review', 'channel-contribution', 'operating-scorecard',
     'store-portfolio', 'paid-efficiency', 'creative-spend', 'creative-formats', 'product-gainers', 'product-profit',
@@ -194,7 +194,10 @@ test('Start here leads the foundation and opens each preset\'s dashboard with it
     opened.push(key);
   }
   assert.deepEqual(opened.sort(), [...new Set(presets.map(p => p.dashboard))].sort());
-  assert.equal(m.dashboards.get(installed.ids['dashboard:foundation']).tabs[0].name, 'Start here');
+  // Not a tab of the foundation: its public link (the public demo) does not follow links to dashboards.
+  const foundation = m.dashboards.get(installed.ids['dashboard:foundation']);
+  assert.ok(!foundation.tabs.some(t => t.name === 'Start here'));
+  assert.ok(!foundation.dashcards.some(c => start.dashcards.some(s => s.card_id === c.card_id)));
   // Without the ad report, cohorts, order lines, orders or store roster, only the summary's and
   // performance tables' presets remain.
   const partial = define().nodes.find(n => n.key === 'dashboard:start');
@@ -205,7 +208,7 @@ test('unavailable optional sources leave out only their cards and empty tabs', a
   const m = fakeMetabase(); const definition = define();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Start here', 'Overview', 'Business review', 'Performance tables']);
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables']);
   assert.ok(!dashboard.dashcards.some(c => c.card_id === installed.ids['question:store_context']));
   assert.ok(definition.unavailable.some(item => item.name === 'All stores' && /dim_stores/.test(item.reason)));
   assert.ok(definition.unavailable.some(item => item.name === 'Reporting context' && /not synced/.test(item.reason)));

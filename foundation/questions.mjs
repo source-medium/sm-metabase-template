@@ -476,8 +476,8 @@ const start = (key, row, col, size_y) => {
 
 /**
  * The dashboards. Each is installed on its own and as tabs of the combined foundation
- * dashboard, in this order (a `first` dashboard leads the combined one, wherever it is
- * listed). A dashboard whose questions are unavailable is skipped
+ * dashboard, in this order, except a `combined: false` one, installed only on its own.
+ * A dashboard whose questions are unavailable is skipped
  * without hiding the others. `label` names its tab in the combined dashboard when it
  * has no tabs of its own. A card's `clicks` make a column clickable: it sets dashboard
  * filters from the clicked row, or from this dashboard's own filters (`current`), on this
@@ -551,9 +551,9 @@ export function dashboards() {
       description: 'Published source freshness, metric definitions and fields. Pipeline freshness, period completeness and quality checks are not published.',
       tabs: [], cards: [layout('data_health', 0, 0, 24, 5), withFilters(layout('metric_catalog', 5, 0, 24, 10), 'metric_search'),
         withFilters(layout('field_dictionary', 15, 0, 24, 10), 'source_table', 'field_search')]},
-    // Listed last because it opens every dashboard above; `first` makes it the combined
-    // dashboard's first tab.
-    {key: 'dashboard:start', label: 'Start here', name: 'SourceMedium start here', first: true,
+    // Listed last because it opens every dashboard above. It is not a tab of the combined
+    // dashboard, whose public link (the public demo) cannot follow its links.
+    {key: 'dashboard:start', name: 'SourceMedium start here', combined: false,
       description: 'Common questions, each opening its dashboard with the filters set. A question whose dashboard is unavailable is left out.',
       // Each row of cards is as tall as its longest list: a title, the column headings, its presets.
       tabs: [], cards: [start('start_summary', 0, 0, 5), start('start_performance', 0, 12, 5), start('start_paid', 5, 0, 4),

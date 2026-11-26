@@ -61,11 +61,13 @@ function clickSettings(card, parameters, layouts, ids) {
 
 // Compose only available dashboards. Questions and calculations are shared with the
 // standalone dashboards, never copied; the combined dashboard shows every filter they show.
-function combine(layouts, options) {
+// A `combined: false` dashboard (Start here) stays on its own: its links open other
+// dashboards, which Metabase does not follow from a public link of the combined one.
+function combine(available, options) {
+  const layouts = available.filter(layout => layout.combined !== false);
   const tabs = [];
   const cards = [];
-  // A `first` dashboard (Start here) is installed after the dashboards it opens, yet leads.
-  for (const layout of [...layouts.filter(l => l.first), ...layouts.filter(l => !l.first)]) {
+  for (const layout of layouts) {
     const offset = tabs.length;
     tabs.push(...(layout.tabs.length ? layout.tabs : [layout.label]));
     cards.push(...layout.cards.map(card => ({...card, tab: offset + (card.tab ?? 0)})));

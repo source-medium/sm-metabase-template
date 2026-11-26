@@ -49,7 +49,6 @@ delivers its tables, so a missing source never hides the others.
 
 | Tab | Questions | Source |
 | --- | --- | --- |
-| Start here | Common questions, such as Weekly review, Product gainers or Cohort health. Select one to open its dashboard with the dates, comparisons, ranking or period already set; you can change them from there. A question whose dashboard is unavailable is left out, and Store portfolio needs two or more stores | None: fixed lists that read no table |
 | Overview | Net revenue, orders, ad spend and MER, then the daily or cumulative revenue trend with the comparison dashed; the biggest daily changes; sales channel contributions; revenue per order and sessions; the period comparison; five more trends | `rpt_executive_summary_daily` |
 | Business review | Revenue and deductions and new vs repeat purchases against the comparison, a business summary by day, week or month, and each store's currency, time zone and latest data date | `rpt_executive_summary_daily`, `dim_stores` |
 | Performance tables | Revenue and orders, marketing efficiency, and new and repeat purchases by day, week or month, plus ad platform delivery and results by period (CPM, CPC, conversion rate) | `rpt_executive_summary_daily`, `rpt_ad_performance_daily` |
@@ -61,6 +60,14 @@ delivers its tables, so a missing source never hides the others.
 | Geography | Revenue, orders and mapped coverage against both comparisons, world and US state maps, countries and regions with revenue change, and a daily trend; a country, then a region, scopes the tab and Orders | `obt_orders` |
 | Orders | The 500 most recently processed orders, all or only valid, searchable by name, number or ID; an order opens its details and attribution evidence | `obt_orders`, `fct_order_attribution_signals` |
 | Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
+
+**SourceMedium start here**, a dashboard of its own, lists common questions,
+such as Weekly review, Product gainers or Cohort health. Select one to open its
+dashboard with the dates, comparisons, ranking or period already set; you can
+change them from there. A question whose dashboard is unavailable is left out,
+and Store portfolio needs two or more stores. Its lists read no table. It works
+for people signed in to Metabase: Metabase does not open another dashboard from
+a public link, so it is not a tab of the foundation dashboard.
 
 On **Creatives**, select an ad to see its current copy, images and video links
 where supplied. The ranking requires a creative ID. Campaign or affiliate spend

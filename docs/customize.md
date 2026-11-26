@@ -114,14 +114,13 @@ To add a preset for a dashboard that already has a card, add an entry. For a
 new destination, add a `START` entry with that dashboard's `table` and
 `requires`, then a `start(...)` card in `dashboard:start`. A card is left out
 when the dashboard it opens is unavailable. Its SQL is a generated list of
-values that reads no table, so it has no SQL file. `first: true` makes Start
-here the first tab of the combined dashboard, but it still installs after the
-dashboards it opens.
+values that reads no table, so it has no SQL file. Start here installs after
+the dashboards it opens. `combined: false` keeps it out of the combined
+dashboard: Metabase does not open another dashboard from a public link, so its
+questions work only for people signed in to Metabase.
 
 Metabase starts the previous week on the instance's first day of the week:
 Sunday, unless an admin changes it under **Admin settings**, **Localization**.
-Metabase does not open another dashboard from a public link, so Start here's
-questions work only for people signed in to Metabase.
 
 ## Remove something
 
