@@ -200,7 +200,8 @@ export const rows = {
     impressions: row.impressions, clicks: row.clicks, click_through_rate: row.click_through_rate,
     cost_per_click: row.ad_spend / row.clicks, platform_conversions: row.platform_conversions,
     platform_revenue: row.platform_revenue, platform_roas: row.platform_roas,
-    cost_per_platform_conversion: row.cost_per_platform_conversion
+    cost_per_platform_conversion: row.cost_per_platform_conversion,
+    source_system: ['meta_ads', 'google_ads', 'tiktok_ads'][i]
   })),
   paid_trend: paidTrend,
   paid_breakdown: adSpend.map(r => ({name: r.name, ad_spend: r.value, share_of_spend: r.share_of_total, compare_ad_spend: r.compare_value,
