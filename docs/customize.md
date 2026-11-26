@@ -121,6 +121,8 @@ questions work only for people signed in to Metabase.
 
 Metabase starts the previous week on the instance's first day of the week:
 Sunday, unless an admin changes it under **Admin settings**, **Localization**.
+Choose Monday there to match the template's Week periods and SourceMedium's
+models. SourceMedium's hosted Metabase starts weeks on Monday.
 
 ## Remove something
 
