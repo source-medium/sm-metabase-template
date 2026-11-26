@@ -205,9 +205,11 @@ test('a warehouse with one store installs no store choice and no All stores view
   for (const extra of [[], ['--store', 'store-a']]) {
     const several = (await planWith(foundationTables, [['store-a', 'USD'], ['store-b', 'USD']], extra)).plan;
     assert.ok(keys(several).includes('dashboard:stores') && keys(several).includes('question:stores'));
+    assert.ok(keys(several).includes('question:start_stores'), 'Store portfolio starts from All stores');
     assert.ok(parameters(several).includes('store'));
     const one = (await planWith(foundationTables, [['store-a', 'USD']], extra)).plan;
     assert.ok(!keys(one).includes('dashboard:stores') && !keys(one).includes('question:stores'));
+    assert.ok(keys(one).includes('dashboard:start') && !keys(one).includes('question:start_stores'), 'and no Store portfolio preset');
     assert.ok(!parameters(one).includes('store'));
     // Not a limitation: there is nothing to compare, so nothing is reported missing.
     assert.ok(!one.unsupported.some(item => /stores/i.test(item.name)));

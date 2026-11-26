@@ -1,5 +1,5 @@
 // Emit the installer's questions and resolved metric snippets for the offline SQL checks.
-import {questions} from '../foundation/questions.mjs';
+import {questions, presetRows} from '../foundation/questions.mjs';
 import {rows, emptyTypes} from '../scripts/ui-capture/rows.mjs';
 import {fixtureFoundation} from './fixtures.mjs';
 
@@ -18,7 +18,9 @@ for (const recipe of questions) {
       return snippets.get(name);
     });
     result[key] = {query, configured: card.visualization_settings['table.columns']?.map(col => col.name) ?? [],
-      fixture: Object.keys(rows[recipe.key][0] ?? emptyTypes[recipe.key])};
+      fixture: Object.keys(rows[recipe.key][0] ?? emptyTypes[recipe.key]),
+      // A literal question's rows are its definition, so the check compares them whole.
+      ...(recipe.literal ? {presets: presetRows(recipe.key)} : {})};
   }
 }
 console.log(JSON.stringify(result));

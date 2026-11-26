@@ -2,6 +2,7 @@
 // units and visualization settings. These rows never run the foundation's BigQuery SQL.
 import published from '../../contracts/dashboard-metrics-v1/definitions.json' with {type: 'json'};
 import {tables, columnFormats} from '../../tests/fixtures.mjs';
+import {questions, presetRows} from '../../foundation/questions.mjs';
 
 function commerce(net_revenue, summary_orders, ad_spend, sessions) {
   return {net_revenue, summary_orders, net_revenue_per_summary_order: net_revenue / summary_orders,
@@ -247,7 +248,9 @@ export const rows = {
       order_net_revenue: 'Order revenue after discounts and refunds.', order_count: 'Orders attributed to this day and channel.',
       ad_spend: 'Advertising cost recorded for the day.', website_sessions: 'Visits recorded on the storefront.',
       order_gross_revenue: 'Order revenue before discounts and refunds.', new_customer_order_count: 'Orders placed by first-time customers.',
-      repeat_customer_order_count: 'Orders placed by returning customers.'})[field.name], is_key_column: false}))
+      repeat_customer_order_count: 'Orders placed by returning customers.'})[field.name], is_key_column: false})),
+  // Start here shows the presets themselves, the same literal rows the installed SQL returns.
+  ...Object.fromEntries(questions.filter(q => q.literal).map(q => [q.key, presetRows(q.key)])),
 };
 
 // PostgreSQL needs the output schema even when the default filters select zero rows.

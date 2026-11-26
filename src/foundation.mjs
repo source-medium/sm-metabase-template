@@ -19,12 +19,17 @@ function expand(sql, key, within = []) {
   });
 }
 
-/** Each question's SQL, read from foundation/sql/<key>.sql with its includes expanded. */
+/**
+ * Each question's SQL, read from foundation/sql/<key>.sql with its includes expanded. A literal
+ * question (Start here) carries its generated SQL instead.
+ */
 export function foundationSql() {
   return Object.fromEntries(questions.map(question => {
-    let sql;
-    try { sql = read(`../foundation/sql/${question.key}.sql`); }
-    catch { throw new Error(`Missing foundation/sql/${question.key}.sql.`); }
+    let sql = question.sql;
+    if (sql === undefined) {
+      try { sql = read(`../foundation/sql/${question.key}.sql`); }
+      catch { throw new Error(`Missing foundation/sql/${question.key}.sql.`); }
+    }
     return [question.key, expand(sql, question.key)];
   }));
 }
@@ -32,7 +37,8 @@ export function foundationSql() {
 // Clicking a column sets dashboard filters from the clicked row, or from a filter's current
 // value on this dashboard ({parameter: id}): on this dashboard, or on the dashboard a click
 // opens. A filter the destination (or, for a current value, this dashboard) does not have is
-// left out, and a click with nothing left to set does nothing.
+// left out. A click on this dashboard with nothing left to set does nothing; one that opens
+// another dashboard still opens it, with that dashboard's defaults.
 function clickSettings(card, parameters, layouts, ids) {
   const column_settings = {};
   const sourceOf = from => typeof from === 'string' ? {type: 'column', id: from, name: from} :
@@ -45,7 +51,7 @@ function clickSettings(card, parameters, layouts, ids) {
     const parameterMapping = Object.fromEntries(Object.entries(click.set)
       .map(([id, from]) => [id, sourceOf(from)]).filter(([id, source]) => source && available.some(p => p.id === id))
       .map(([id, source]) => [id, {id, source, target: {type: 'parameter', id}}]));
-    if (!Object.keys(parameterMapping).length) continue;
+    if (!target && !Object.keys(parameterMapping).length) continue;
     column_settings[JSON.stringify(['name', click.column])] = {click_behavior: target ?
       {type: 'link', linkType: 'dashboard', targetId: ids.get(click.dashboard) || 0, parameterMapping} :
       {type: 'crossfilter', parameterMapping}};
@@ -55,7 +61,10 @@ function clickSettings(card, parameters, layouts, ids) {
 
 // Compose only available dashboards. Questions and calculations are shared with the
 // standalone dashboards, never copied; the combined dashboard shows every filter they show.
-function combine(layouts, options) {
+// A `combined: false` dashboard (Start here) stays on its own: its links open other
+// dashboards, which Metabase does not follow from a public link of the combined one.
+function combine(available, options) {
+  const layouts = available.filter(layout => layout.combined !== false);
   const tabs = [];
   const cards = [];
   for (const layout of layouts) {
@@ -136,11 +145,13 @@ export function definitions(catalog, tables, sql, options) {
       uses.set(`question:${variant.key}`, filters);
     }
   }
-  // A dashboard leaves out cards whose questions are unavailable (reported above) and tabs
-  // left empty, and is skipped only when nothing is left. It shows the filters its cards consume.
+  // A dashboard leaves out cards whose questions are unavailable (reported above), cards that
+  // only open a dashboard left out (`opens`), and tabs left empty, and is skipped only when
+  // nothing is left. It shows the filters its cards consume.
   const available = [];
   for (const layout of dashboards(options).filter(shown)) {
-    const kept = layout.cards.filter(c => uses.has(c.key));
+    const kept = layout.cards.filter(c => uses.has(c.key) && (!c.opens || available.some(a => a.key === c.opens)))
+      .map(({opens: _opens, ...card}) => card);
     if (!kept.length) { unavailable.push({name: layout.name, reason: 'None of its questions are available.'}); continue; }
     const tabs = layout.tabs.filter((_, i) => kept.some(c => c.tab === i));
     const cards = kept.map(c => c.tab === null ? c : {...c, tab: tabs.indexOf(layout.tabs[c.tab])});

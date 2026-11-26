@@ -57,7 +57,7 @@ test('a customer copy of a managed question blocks a discovered install, never a
   const baseline = makePlan(d, await snapshot(discovered.api, options, d.nodes), options);
   assert.equal(baseline.actions.find(a => a.key === 'question:kpis').reason, 'Duplicate managed identities; preserved.');
   assert.deepEqual(baseline.actions.filter(a => a.kind === 'dashboard' && a.action === 'blocked').map(a => a.key),
-    ['dashboard:summary', 'dashboard:stores', 'dashboard:foundation']);
+    ['dashboard:summary', 'dashboard:stores', 'dashboard:start', 'dashboard:foundation']);
 
   const m = fakeMetabase();
   const map = await install(m, d);
@@ -94,7 +94,7 @@ test('a recorded original that was moved, edited or archived stays a conflict be
     const before = structuredClone(m.cards.get(id));
     const {plan: reviewed} = await plan(m, d, map);
     assert.deepEqual(changed(reviewed.actions).map(a => [a.key, a.action, a.id]),
-      [['question:kpis', 'conflict', id], ...['dashboard:summary', 'dashboard:foundation'].map(key => [key, 'blocked', map.objects[key].id])]);
+      [['question:kpis', 'conflict', id], ...['dashboard:summary', 'dashboard:start', 'dashboard:foundation'].map(key => [key, 'blocked', map.objects[key].id])]);
     await applyPlan(m.api, d, hosted(map), reviewed);
     assert.deepEqual(m.cards.get(id), before);
   }
