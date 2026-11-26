@@ -176,6 +176,34 @@ class InstalledSql(unittest.TestCase):
         row, = query(self.db, "creative_formats", campaign="ad_campaign_id = 'selected'")
         self.assertEqual((row["creative_format"], row["ad_spend"], row["compare_ad_spend"]), ("Video", 100, 30))
 
+    def test_an_asset_shows_once_however_many_ads_carry_it(self):
+        # Meta creative 'shared' runs in three ads with the same image and headline; one ad reports
+        # another status. A Google asset group's asset belongs to no ad.
+        self.db.execute("""
+          CREATE TABLE tenant_sm_transformed_v2.rpt_ad_creative_assets AS
+          SELECT 'store-1' AS sm_store_id, platform AS source_system, creative AS ad_creative_id, ad AS ad_id,
+            'campaign' AS ad_campaign_id, role AS asset_role, text AS asset_text, image AS asset_image_url,
+            NULL::varchar AS asset_video_url, NULL::varchar AS asset_video_id, NULL::varchar AS asset_id,
+            NULL::varchar AS asset_link_url, pinned AS asset_pinned_position, NULL::varchar AS asset_performance_label,
+            status AS asset_status, CONCAT(platform, ad, role, text) AS sm_ad_creative_asset_key
+          FROM (VALUES ('meta_ads', 'shared', 'ad-1', 'image', NULL, 'https://cdn.example/a.png', NULL, 'ACTIVE'),
+                       ('meta_ads', 'shared', 'ad-2', 'image', NULL, 'https://cdn.example/a.png', NULL, 'ACTIVE'),
+                       ('meta_ads', 'shared', 'ad-3', 'image', NULL, 'https://cdn.example/a.png', NULL, 'PAUSED'),
+                       ('meta_ads', 'shared', 'ad-1', 'title', 'Hello', NULL, NULL, 'ACTIVE'),
+                       ('meta_ads', 'shared', 'ad-2', 'title', 'Hello', NULL, NULL, 'ACTIVE'),
+                       ('meta_ads', 'shared', 'ad-3', 'title', 'Hello', NULL, NULL, 'ACTIVE'),
+                       ('meta_ads', 'shared', 'ad-1', 'title', 'Hi there', NULL, NULL, 'ACTIVE'),
+                       ('google_ads', 'group', NULL, 'title', 'Hello', NULL, 'HEADLINE_1', 'ENABLED'))
+            f(platform, creative, ad, role, text, image, pinned, status)
+        """)
+        shared = query(self.db, "creative_assets", asset_creative="'Meta/shared'")
+        self.assertEqual([(r["asset_role"], r["image_url"], r["asset_text"], r["ads"], r["asset_status"]) for r in shared],
+                         [("image", "https://cdn.example/a.png", None, 3, "ACTIVE, PAUSED"),
+                          ("title", None, "Hello", 3, "ACTIVE"), ("title", None, "Hi there", 1, "ACTIVE")])
+        group, = query(self.db, "creative_assets", asset_creative="'Google/group'")
+        self.assertEqual((group["asset_text"], group["ads"], group["asset_pinned_position"]), ("Hello", None, "HEADLINE_1"))
+        self.assertEqual(len(query(self.db, "creative_assets")), 4)
+
     def test_default_acquisition_segments(self):
         self.db.execute("""
           CREATE TABLE tenant_sm_transformed_v2.rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters AS

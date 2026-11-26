@@ -600,6 +600,38 @@ test('a record from a template that recorded no revision heals on the next apply
 });
 
 
+test('an inventory installed with a row per ad updates in place to a row per asset', async () => {
+  // The question as installs before 2026-11-26 have it: one row per ad carrying each asset.
+  const tail = sql.creative_assets.indexOf('-- The table has a row per ad');
+  assert.ok(tail > 0);
+  const perAd = {...sql, creative_assets: sql.creative_assets.slice(0, tail).replace('ad_id, asset_role', 'ad_id, ad_campaign_id, asset_role') +
+    `SELECT store_id, ad_platform, creative_id, asset_role, image_url, video_url, asset_text, destination_url,
+  asset_video_id, asset_id, ad_id, ad_campaign_id, asset_pinned_position, asset_performance_label, asset_status
+FROM inventory
+WHERE TRUE [[AND CONCAT(ad_platform, '/', creative_id) = {{asset_creative}}]]
+ORDER BY store_id, ad_platform, creative_id, asset_role, sm_ad_creative_asset_key
+LIMIT 500
+`};
+  const define = sqlFiles => definitions(compileCatalog([...rows, ...paidRows], foundationTables, options.dataset, documented(foundationTables)), foundationTables, sqlFiles, options);
+  const m = fakeMetabase();
+  const before = define(perAd);
+  const installed = await applyPlan(m.api, before, options, await plan(m.api, before));
+  const after = define(sql);
+  const reviewed = await plan(m.api, after);
+  assert.deepEqual(reviewed.actions.filter(a => a.action !== 'unchanged').map(a => [a.key, a.action]), [['question:creative_assets', 'update']]);
+  const applied = await applyPlan(m.api, after, options, reviewed);
+  const id = installed.ids['question:creative_assets'];
+  assert.equal(applied.ids['question:creative_assets'], id);
+  assert.match(m.cards.get(id).dataset_query.native.query, /COUNT\(DISTINCT ad_id\), 0\) AS ads,/);
+  assert.equal(m.cards.get(id).visualization_settings.column_settings[JSON.stringify(['name', 'ads'])].column_title, 'Ads');
+  // Both dashboards still filter the same card by the selected creative.
+  for (const dashboard of ['dashboard:creatives', 'dashboard:foundation']) {
+    const card = m.dashboards.get(applied.ids[dashboard]).dashcards.find(c => c.card_id === id);
+    assert.ok(card.parameter_mappings.some(p => p.parameter_id === 'asset_creative' && p.target[1][1] === 'asset_creative'), dashboard);
+  }
+  assert.ok((await plan(m.api, after)).actions.every(a => a.action === 'unchanged'));
+});
+
 test('current creative inventory is optional and separate from dated performance', () => {
   const without = foundationTables.filter(t => t.name !== 'rpt_ad_creative_assets');
   const definition = definitions(compileCatalog([...rows, ...paidRows], without, options.dataset, documented(without)), without, sql, options);
