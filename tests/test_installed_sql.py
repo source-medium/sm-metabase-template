@@ -214,6 +214,33 @@ class InstalledSql(unittest.TestCase):
         result = query(self.db, "retention_segments", acquisition="'no_filters'", as_of_month="DATE '2020-10-01'")
         self.assertEqual(result, [])
 
+    def test_product_explorer_search_narrows_rows_not_shares(self):
+        self.db.execute("""
+          CREATE TABLE tenant_sm_transformed_v2.obt_order_lines AS
+          SELECT day::date AS date, day::timestamp AS order_processed_at_local_datetime, TRUE AS is_order_sm_valid,
+            'online_dtc' AS sm_channel, 'store-1' AS sm_store_id, 'shopify' AS source_system, product AS product_id,
+            product || '-v' AS product_variant_id, title AS product_title, 'Large' AS product_variant_title,
+            NULL AS primary_product_image_url, sku, revenue AS order_line_net_revenue, 1 AS order_line_net_quantity,
+            revenue / 2 AS order_line_product_gross_profit, 0 AS order_line_refunds, 0 AS order_line_refund_quantity,
+            1 AS order_line_quantity, product || day AS order_line_id, 1 AS order_line_product_cost
+          FROM (VALUES ('2020-10-12', 'p1', 'Daily blend', 'DB-L', 100), ('2020-10-13', 'p2', 'Evening tea', 'ET-1', 50),
+                       ('2020-10-13', 'p3', 'Morning blend', 'MB-1', 30), ('2020-10-10', 'p1', 'Daily blend', 'DB-L', 80))
+            f(day, product, title, sku, revenue)
+        """)
+        explore = lambda search=None: query(self.db, "product_explorer", product_group="'product'", product_rank="'net_revenue'",
+                                            **({"product_search": search} if search else {}))
+        everything = explore()
+        self.assertEqual([r["product_title"] for r in everything], ["Daily blend", "Evening tea", "Morning blend"])
+        blends = explore("' BLEND '")
+        self.assertEqual([(r["product_title"], r["value"], r["compare_value"]) for r in blends],
+                         [("Daily blend", 100, 80), ("Morning blend", 30, None)])
+        self.assertEqual([r["share_of_total"] for r in blends], [everything[0]["share_of_total"], everything[2]["share_of_total"]])
+        self.assertEqual([r["product_title"] for r in explore("'et-1'")], ["Evening tea"], "a SKU matches exactly, in any case")
+        self.assertEqual([r["product_title"] for r in explore("'p3'")], ["Morning blend"], "a product ID matches exactly")
+        self.assertEqual(explore("'ET'"), [], "an ID or SKU never matches in part")
+        variants = query(self.db, "product_explorer", product_group="'variant'", product_rank="'net_revenue'", product_search="'p2-v'")
+        self.assertEqual([(r["product_title"], r["variant_title"]) for r in variants], [("Evening tea", "Large")])
+
     def test_installed_table_settings_and_capture_fields(self):
         for key, card in cards.items():
             with self.subTest(question=key):
