@@ -103,7 +103,7 @@ export const questions = [
     variants: [
       {key: 'kpi_orders', name: 'Orders', display: 'smartscalar', settings: scalar('summary_orders')},
       {key: 'kpi_spend', name: 'Ad spend', display: 'scalar', settings: neutralScalar('ad_spend')},
-      {key: 'kpi_mer', name: 'Marketing efficiency (MER)', display: 'smartscalar', settings: scalar('mer')},
+      {key: 'kpi_mer', name: 'MER', display: 'smartscalar', settings: scalar('mer')},
       {key: 'kpi_order_value', name: 'Revenue per order', display: 'smartscalar', settings: scalar('net_revenue_per_summary_order')},
       {key: 'kpi_sessions', name: 'Website sessions', display: 'smartscalar', settings: scalar('sessions')}]},
   {key: 'comparison', name: 'Period comparison', table: SUMMARY, date: 'date', settings: changeColors('net_revenue_change', 'summary_orders_change', 'mer_change'),
@@ -395,9 +395,10 @@ export function dashboards() {
         layout('kpi_mer', 0, 18, 6, 4, 0), withFilters(layout('trend', 4, 0, 24, 7, 0), 'trend_values'),
         layout('revenue_changes', 11, 0, 24, 5, 0), layout('contributions', 16, 0, 24, 8, 0),
         layout('kpi_order_value', 24, 0, 12, 4, 0), layout('kpi_sessions', 24, 12, 12, 4, 0),
-        layout('comparison_measures', 28, 0, 24, 9, 0),
-        layout('trend_orders', 37, 0, 8, 5, 0), layout('trend_order_value', 37, 8, 8, 5, 0), layout('trend_spend', 37, 16, 8, 5, 0),
-        layout('trend_mer', 42, 0, 12, 5, 0), layout('trend_sessions', 42, 12, 12, 5, 0),
+        // Tall enough for all twelve measure and period rows.
+        layout('comparison_measures', 28, 0, 24, 12, 0),
+        layout('trend_orders', 40, 0, 8, 5, 0), layout('trend_order_value', 40, 8, 8, 5, 0), layout('trend_spend', 40, 16, 8, 5, 0),
+        layout('trend_mer', 45, 0, 12, 5, 0), layout('trend_sessions', 45, 12, 12, 5, 0),
         withFilters(layout('business', 0, 0, 24, 9, 1), 'grain'),
         layout('deductions', 9, 0, 10, 7, 1), layout('purchase_mix', 9, 10, 14, 7, 1),
         layout('store_context', 16, 0, 24, 4, 1)]},
