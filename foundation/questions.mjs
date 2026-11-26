@@ -40,6 +40,85 @@ const PRODUCT_COLUMNS = ['product_variant_id', 'product_variant_title', 'primary
 const COHORTS = 'rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters';
 const DICTIONARY = 'dim_data_dictionary';
 const PROCESSED = 'order_processed_at_local_datetime';
+// The columns the store and shipping questions read beyond their tables' always-present ones.
+const STORE_ROSTER = {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'brand_name', 'store_logo_url']};
+const SHIPPING = {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']};
+
+/**
+ * Starting points for common questions (smstack specs/26q4/template-reports-spec.md §6). A preset
+ * is a destination dashboard plus fixed filter values: never a query, formula or layout of its
+ * own, and every filter stays the viewer's to change. The IDs are the App Starter's, so the two
+ * lists stay in step. Presets that open one dashboard set the same filters, writing out a value
+ * the dashboard would default to, so a click never keeps a value from the previous view.
+ */
+export const presets = [
+  {id: 'weekly-review', name: 'Weekly review', question: 'What changed last week?',
+    dashboard: 'dashboard:summary', set: {date: 'past1weeks', compare: 'previous', compare2: 'last_year'}},
+  {id: 'monthly-review', name: 'Monthly review', question: 'How did last month compare?',
+    dashboard: 'dashboard:summary', set: {date: 'past1months', compare: 'previous', compare2: 'last_year'}},
+  {id: 'channel-contribution', name: 'Channel contribution', question: 'Which sales channels drove the change?',
+    dashboard: 'dashboard:summary', set: {date: 'past28days', compare: 'previous', compare2: 'last_year'}},
+  {id: 'operating-scorecard', name: 'Operating scorecard', question: 'Which operating measures moved?',
+    dashboard: 'dashboard:performance', set: {grain: 'week'}},
+  {id: 'store-portfolio', name: 'Store portfolio', question: 'Which stores need attention?',
+    dashboard: 'dashboard:stores', set: {}},
+  {id: 'paid-efficiency', name: 'Paid efficiency', question: 'How are spend and platform outcomes changing?',
+    dashboard: 'dashboard:paid', set: {breakdown: 'platform'}},
+  {id: 'creative-spend', name: 'Creative spend', question: 'Where is creative spend concentrated?',
+    dashboard: 'dashboard:creatives', set: {creative_sort: 'spend'}},
+  {id: 'creative-formats', name: 'Creative formats', question: 'Which formats and launch weeks differ?',
+    dashboard: 'dashboard:creatives', set: {creative_sort: 'spend'}},
+  {id: 'product-gainers', name: 'Product gainers', question: 'Which products gained revenue?',
+    dashboard: 'dashboard:product', set: {product_rank: 'net_revenue', product_ranking: 'gainers'}},
+  {id: 'product-profit', name: 'Product profit', question: 'Which products lost gross profit?',
+    dashboard: 'dashboard:product', set: {product_rank: 'gross_profit', product_ranking: 'decliners'}},
+  {id: 'refund-concentration', name: 'Refund concentration', question: 'Where are refunds concentrated?',
+    dashboard: 'dashboard:product', set: {product_rank: 'refunds', product_ranking: 'largest'}},
+  {id: 'cohort-health', name: 'Cohort health', question: 'Are newer cohorts retaining better at the same age?',
+    dashboard: 'dashboard:retention', set: {}},
+  {id: 'geography-mix', name: 'Geography mix', question: 'Which locations changed?',
+    dashboard: 'dashboard:geography', set: {}},
+];
+
+// One Start here card per destination, on that dashboard's source table and the columns it
+// requires, so the card is left out with the dashboard it opens.
+const START = [
+  {key: 'start_summary', name: 'Executive summary', dashboard: 'dashboard:summary', table: SUMMARY},
+  {key: 'start_performance', name: 'Performance tables', dashboard: 'dashboard:performance', table: SUMMARY},
+  {key: 'start_stores', name: 'All stores', dashboard: 'dashboard:stores', table: SUMMARY, requires: STORE_ROSTER,
+    several: true},
+  {key: 'start_paid', name: 'Paid marketing', dashboard: 'dashboard:paid', table: ADS},
+  {key: 'start_creatives', name: 'Creatives', dashboard: 'dashboard:creatives', table: ADS,
+    requires: {[ADS]: ['ad_creative_id', 'ad_creative_format']}},
+  {key: 'start_product', name: 'Products', dashboard: 'dashboard:product', table: ORDER_LINES,
+    requires: {[ORDER_LINES]: PRODUCT_COLUMNS}},
+  {key: 'start_retention', name: 'Retention', dashboard: 'dashboard:retention', table: COHORTS},
+  {key: 'start_geography', name: 'Geography', dashboard: 'dashboard:geography', table: ORDERS, requires: SHIPPING},
+];
+const startEntry = key => START.find(entry => entry.key === key);
+const presetFilters = entry => Object.keys(presets.find(p => p.dashboard === entry.dashboard).set);
+
+/** A Start here card's rows: each preset's ID, name and question, then the filter values it sets. */
+export function presetRows(key) {
+  const entry = startEntry(key);
+  return presets.filter(p => p.dashboard === entry.dashboard).map(p => ({preset_id: p.id, preset: p.name,
+    preset_question: p.question, ...Object.fromEntries(presetFilters(entry).map(id => [`set_${id}`, p.set[id]]))}));
+}
+
+// Literal rows in a static UNNEST: the card reads no table, so it costs no warehouse scan. Each
+// row carries its place in the list, which keeps the registry's order.
+function presetSql(key) {
+  const literal = value => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+  const rows = presetRows(key);
+  const columns = Object.keys(rows[0]);
+  return `-- Generated from presets in foundation/questions.mjs: one row per preset, from literals.
+SELECT ${columns.join(', ')}
+FROM UNNEST([
+${rows.map((row, i) => `  STRUCT(${[`${i + 1} AS position`, ...columns.map(c => `${literal(row[c])} AS ${c}`)].join(', ')})`).join(',\n')}
+])
+ORDER BY position
+`;
+}
 
 // A number card with the change against Compare with and Second comparison, read from the
 // question's compare_<column> and compare2_<column> outputs.
@@ -83,7 +162,8 @@ const link = {view_as: 'link', link_text: 'Open'};
 
 /**
  * One entry per saved question. The SQL is foundation/sql/<key>.sql; a line
- * `-- @include name` there stands for foundation/sql/include/<name>.sql.
+ * `-- @include name` there stands for foundation/sql/include/<name>.sql. A `literal`
+ * question (Start here) carries generated `sql` instead and reads no table.
  *
  * - `table` is the source; `date` is the column the Date filter maps to. `metadata`
  *   questions read the metadata dataset (written METADATA in the SQL) instead.
@@ -154,7 +234,7 @@ export const questions = [
   {key: 'stores', name: 'All stores', table: SUMMARY, date: 'date', several: true, settings: {...changeColors('net_revenue_change'),
       ...showing(['store_name', 'net_revenue', 'net_revenue_change', 'store_currency', 'summary_orders', 'ad_spend', 'mer',
         'net_revenue_per_summary_order', 'latest_date', 'brand_name', 'logo_url', 'store_id'])},
-    requires: {dim_stores: ['sm_store_id', 'store_name', 'store_currency_code', 'brand_name', 'store_logo_url']},
+    requires: STORE_ROSTER,
     columns: {logo_url: image},
     description: 'One row per store, never a cross-store total: stores can report in different currencies. Revenue change is against Compare with. Select a store to open its executive summary.',
     metrics: summaryMetrics},
@@ -236,29 +316,29 @@ export const questions = [
   {key: 'retention_segments', name: 'Acquisition segments', table: COHORTS,
     description: 'Segments of the chosen acquisition attribute in the cohort window, by first-month customers. Select one to show its cohorts.'},
   {key: 'geography_totals', name: 'Valid-order net revenue', table: ORDERS, date: PROCESSED, display: 'smartscalar', settings: scalar('net_revenue'),
-    requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
+    requires: SHIPPING,
     description: 'Valid orders by processed date for the shipping scope (country and region filters), against Compare with and Second comparison.',
     variants: [
       {key: 'geography_orders_total', name: 'Valid orders', display: 'smartscalar', settings: scalar('orders')},
       {key: 'geography_coverage', name: 'Mapped-order coverage', display: 'smartscalar', settings: scalar('mapped_coverage')}]},
   {key: 'geography', name: 'Shipping countries', table: ORDERS, date: PROCESSED, settings: {...changeColors('net_revenue_change'),
       ...showing(['country', 'net_revenue', 'net_revenue_change', 'orders', 'net_revenue_per_order', 'share_of_net_revenue', 'compare_net_revenue'])},
-    requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
+    requires: SHIPPING,
     description: 'Valid orders by shipping country and processed date, with revenue change against Compare with. Select a country to see its regions. Select one store: currencies can differ between stores.',
     variants: [{key: 'geography_map', name: 'Valid orders by country', display: 'map',
       settings: {'map.type': 'region', 'map.region': 'world_countries', 'map.dimension': 'country', 'map.metric': 'orders'}}]},
   {key: 'geography_regions', name: 'Shipping regions', table: ORDERS, date: PROCESSED, settings: {...changeColors('net_revenue_change'),
       ...showing(['country', 'region', 'net_revenue', 'net_revenue_change', 'orders', 'net_revenue_per_order', 'compare_net_revenue'])},
-    requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
+    requires: SHIPPING,
     description: 'Valid orders by shipping region in the selected country (every country when none is selected). US states are normalized to their two-letter codes. Select a region to scope the totals and orders.'},
   {key: 'geography_states', name: 'Valid orders by US state', table: ORDERS, date: PROCESSED, display: 'map',
     settings: {'map.type': 'region', 'map.region': 'us_states', 'map.dimension': 'region', 'map.metric': 'orders'},
-    requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
+    requires: SHIPPING,
     description: 'Valid US orders by state, shaded by orders. Other countries\' regions are in the regions table.'},
   {key: 'geography_trend', name: 'Shipping scope by day', table: ORDERS, date: PROCESSED, display: 'line',
     settings: {'graph.dimensions': ['date'], 'graph.metrics': ['net_revenue', 'orders'], 'graph.x_axis.title_text': 'Date',
       series_settings: {net_revenue: {title: 'Net revenue'}, orders: {title: 'Orders'}}},
-    requires: {[ORDERS]: ['order_shipping_country_code', 'order_shipping_state', 'is_order_sm_valid']},
+    requires: SHIPPING,
     description: 'Valid-order net revenue and valid orders by processed date for the shipping scope.'},
   {key: 'orders', name: 'Orders, newest first', table: ORDERS, date: PROCESSED, settings: showing(ORDER_COLUMNS, ORDER_COLUMNS.slice(0, -1)),
     requires: {[ORDERS]: ['order_name', 'order_number', 'order_id', 'sm_order_type', 'order_payment_status', 'is_order_sm_valid',
@@ -279,10 +359,16 @@ export const questions = [
     description: 'SourceMedium\'s published metric definitions (aliases fold into their primary metric). Search by name, label or description.'},
   {key: 'field_dictionary', name: 'Field dictionary', table: DICTIONARY, metadata: true,
     description: 'Fields of the selected published source, from the data dictionary. Search by name or description.'},
+  // Start here: the presets for each destination, as literal rows (`literal`: no table read).
+  ...START.map(entry => ({key: entry.key, name: `${entry.name} questions`, table: entry.table, literal: true, sql: presetSql(entry.key),
+    ...(entry.requires ? {requires: entry.requires} : {}), ...(entry.several ? {several: true} : {}),
+    settings: showing(Object.keys(presetRows(entry.key)[0]), ['preset', 'preset_question']),
+    description: `Common questions answered on ${entry.name}. Select one to open it with its filters set; they stay yours to change.`})),
 ];
 
 /** Column headings Metabase shows instead of the SQL alias. */
 export const columnTitles = {
+  preset: 'Starting point', preset_question: 'Question',
   date: 'Date', period: 'Period', start_date: 'From', end_date: 'To', comparison_date: 'Comparison date',
   days_with_rows: 'Days with rows', net_revenue: 'Net revenue', gross_revenue: 'Gross revenue', summary_orders: 'Orders',
   net_revenue_per_summary_order: 'Revenue / order', net_revenue_per_order: 'Revenue / order',
@@ -369,7 +455,8 @@ export const outputDimensions = ['measure_period', 'display_value', 'date', 'mon
   'marketing_channel', 'utm_source', 'utm_medium', 'inference_method', 'segment', 'period_start', 'source_table', 'latest_data_date',
   'fresh_within_14_days', 'table_description', 'metric_label', 'metric_name', 'metric_category', 'metric_unit', 'metric_description',
   'calculation', 'source_model', 'time_basis', 'also_known_as', 'column_name', 'data_type', 'value_format', 'column_description',
-  'is_key_column'];
+  'is_key_column', 'preset_id', 'preset', 'preset_question',
+  ...new Set(presets.flatMap(p => Object.keys(p.set).map(id => `set_${id}`)))];
 
 const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) =>
   ({key: `question:${key}`, row, col, size_x, size_y, tab, ...(clicks ? {clicks} : {})});
@@ -379,10 +466,18 @@ const layout = (key, row, col = 0, size_x = 24, size_y = 6, tab = null, clicks) 
 const withFilters = (card, ...filters) => ({...card, filters});
 // A click that opens another dashboard can carry this dashboard's current filter values.
 const current = (...ids) => Object.fromEntries(ids.map(id => [id, {parameter: id}]));
+// A Start here card: selecting a preset opens its dashboard with the preset's filter values.
+// `opens` leaves the card out when that dashboard is (src/foundation.mjs).
+const start = (key, row, col, size_y) => {
+  const entry = startEntry(key);
+  return {...layout(key, row, col, 12, size_y, null, [{column: 'preset', dashboard: entry.dashboard,
+    set: Object.fromEntries(presetFilters(entry).map(id => [id, `set_${id}`]))}]), opens: entry.dashboard};
+};
 
 /**
  * The dashboards. Each is installed on its own and as tabs of the combined foundation
- * dashboard, in this order. A dashboard whose questions are unavailable is skipped
+ * dashboard, in this order (a `first` dashboard leads the combined one, wherever it is
+ * listed). A dashboard whose questions are unavailable is skipped
  * without hiding the others. `label` names its tab in the combined dashboard when it
  * has no tabs of its own. A card's `clicks` make a column clickable: it sets dashboard
  * filters from the clicked row, or from this dashboard's own filters (`current`), on this
@@ -456,9 +551,17 @@ export function dashboards() {
       description: 'Published source freshness, metric definitions and fields. Pipeline freshness, period completeness and quality checks are not published.',
       tabs: [], cards: [layout('data_health', 0, 0, 24, 5), withFilters(layout('metric_catalog', 5, 0, 24, 10), 'metric_search'),
         withFilters(layout('field_dictionary', 15, 0, 24, 10), 'source_table', 'field_search')]},
+    // Listed last because it opens every dashboard above; `first` makes it the combined
+    // dashboard's first tab.
+    {key: 'dashboard:start', label: 'Start here', name: 'SourceMedium start here', first: true,
+      description: 'Common questions, each opening its dashboard with the filters set. A question whose dashboard is unavailable is left out.',
+      // Each row of cards is as tall as its longest list: a title, the column headings, its presets.
+      tabs: [], cards: [start('start_summary', 0, 0, 5), start('start_performance', 0, 12, 5), start('start_paid', 5, 0, 4),
+        start('start_creatives', 5, 12, 4), start('start_product', 9, 0, 5), start('start_retention', 9, 12, 5),
+        start('start_geography', 14, 0, 4), start('start_stores', 14, 12, 4)]},
   ];
 }
 
 /** The combined dashboard: every available dashboard above, one tab each. */
 export const combinedDashboard = {key: 'dashboard:foundation', name: 'SourceMedium foundation dashboard',
-  description: 'Revenue, performance tables, stores, marketing, creatives, products, retention, geography, orders and data in one dashboard. Sales Channel, Ad platform and cohort As-of month apply only to their mapped tabs. Use one reporting currency and the published source calendars.'};
+  description: 'Common questions to start from, then revenue, performance tables, stores, marketing, creatives, products, retention, geography, orders and data in one dashboard. Sales Channel, Ad platform and cohort As-of month apply only to their mapped tabs. Use one reporting currency and the published source calendars.'};

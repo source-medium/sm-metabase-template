@@ -100,6 +100,29 @@ a release before this one lists the dropped Channel mapping as a change to the
 retention cards and dashboards. Your own dashboards keep the mappings you made;
 remap a retention card's Channel to Acquisition sales channel there yourself.
 
+## Starting points
+
+**Start here** lists the `presets` in `foundation/questions.mjs`. Each has an
+`id` that stays fixed like a key, the `name` and `question` the card shows, the
+`dashboard` it opens and `set`, the filter values it opens with. A value is
+the destination filter's own: a Metabase relative date such as `past1weeks` or
+`past1months`, or a choice such as `week` or `gainers`. Presets that open the
+same dashboard share one card, and each sets the same filters, so write out a
+value even when it matches the default.
+
+To add a preset for a dashboard that already has a card, add an entry. For a
+new destination, add a `START` entry with that dashboard's `table` and
+`requires`, then a `start(...)` card in `dashboard:start`. A card is left out
+when the dashboard it opens is unavailable. Its SQL is a generated list of
+values that reads no table, so it has no SQL file. `first: true` makes Start
+here the first tab of the combined dashboard, but it still installs after the
+dashboards it opens.
+
+Metabase starts the previous week on the instance's first day of the week:
+Sunday, unless an admin changes it under **Admin settings**, **Localization**.
+Metabase does not open another dashboard from a public link, so Start here's
+questions work only for people signed in to Metabase.
+
 ## Remove something
 
 Delete its entry (and SQL file). The next plan lists the removed object under

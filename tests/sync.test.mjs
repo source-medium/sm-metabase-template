@@ -6,7 +6,7 @@ import {snapshot, makePlan} from '../src/snapshot.mjs';
 import {applyPlan} from '../src/apply.mjs';
 import {marker, stamp, prose, digest, dashboardContent} from '../src/ownership.mjs';
 import {rows, tables, options, fakeMetabase, documented, foundationTables, paidRows} from './fixtures.mjs';
-import {dashboards} from '../foundation/questions.mjs';
+import {dashboards, presets} from '../foundation/questions.mjs';
 
 const sql = foundationSql();
 const define = (data = rows) => ({...definitions(compileCatalog(data, tables, options.dataset, documented(tables)), tables, sql, options), unsupported: []});
@@ -47,14 +47,14 @@ test('comparison numbers use their own value for the empty state and preserve sh
   assert.ok(stable.actions.every(a => a.action === 'unchanged'));
 });
 
-test('the eleven-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
+test('the twelve-tab foundation reuses questions and maps only each question\'s actual filters', async () => {
   const m = fakeMetabase();
   const definition = full();
   assert.deepEqual(definition.unavailable, []);
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables', 'All stores', 'Paid marketing',
-    'Creatives', 'Products', 'Retention', 'Geography', 'Orders', 'Data']);
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Start here', 'Overview', 'Business review', 'Performance tables', 'All stores',
+    'Paid marketing', 'Creatives', 'Products', 'Retention', 'Geography', 'Orders', 'Data']);
   const placed = dashboards().flatMap(d => d.cards).length;
   assert.equal(dashboard.dashcards.length, placed);
   assert.equal(new Set(dashboard.dashcards.map(c => c.card_id)).size, placed);
@@ -162,11 +162,50 @@ test('a stale ownership record on a dashboard that matches its definition is ref
   assert.equal((await plan(m.api, definition)).actions.find(a => a.key === 'dashboard:foundation').action, 'conflict');
 });
 
+test('Start here leads the foundation and opens each preset\'s dashboard with its filters, leaving out what is unavailable', async () => {
+  // The IDs are shared with the App Starter's presets (smstack specs/26q4/template-reports-spec.md §6.1).
+  assert.deepEqual(presets.map(p => p.id), ['weekly-review', 'monthly-review', 'channel-contribution', 'operating-scorecard',
+    'store-portfolio', 'paid-efficiency', 'creative-spend', 'creative-formats', 'product-gainers', 'product-profit',
+    'refund-concentration', 'cohort-health', 'geography-mix']);
+  const m = fakeMetabase();
+  const definition = full();
+  const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
+  const order = definition.nodes.filter(n => n.kind === 'dashboard').map(n => n.key);
+  const keyOf = id => Object.entries(installed.ids).find(([key, value]) => key.startsWith('dashboard:') && value === id)[0];
+  const start = m.dashboards.get(installed.ids['dashboard:start']);
+  assert.deepEqual(start.parameters, [], 'presets take no filters of their own');
+  const opened = [];
+  for (const placement of start.dashcards) {
+    const links = Object.entries(placement.visualization_settings.column_settings);
+    assert.deepEqual(links.map(([column]) => column), [JSON.stringify(['name', 'preset'])], 'the preset name is the link');
+    const link = links[0][1].click_behavior;
+    assert.equal(link.type, 'link');
+    const key = keyOf(link.targetId);
+    assert.ok(order.indexOf(key) < order.indexOf('dashboard:start'), `${key} is installed before the links to it`);
+    // Every filter a preset sets is the destination's, so none is dropped; a destination its presets
+    // leave at its defaults is still opened (Retention, Geography, All stores).
+    const set = presets.find(p => p.dashboard === key).set;
+    assert.deepEqual(Object.keys(link.parameterMapping).sort(), Object.keys(set).sort(), key);
+    const parameters = m.dashboards.get(link.targetId).parameters.map(p => p.id);
+    for (const [id, mapping] of Object.entries(link.parameterMapping)) {
+      assert.ok(parameters.includes(id), `${key} has ${id}`);
+      assert.deepEqual(mapping.source, {type: 'column', id: `set_${id}`, name: `set_${id}`});
+    }
+    opened.push(key);
+  }
+  assert.deepEqual(opened.sort(), [...new Set(presets.map(p => p.dashboard))].sort());
+  assert.equal(m.dashboards.get(installed.ids['dashboard:foundation']).tabs[0].name, 'Start here');
+  // Without the ad report, cohorts, order lines, orders or store roster, only the summary's and
+  // performance tables' presets remain.
+  const partial = define().nodes.find(n => n.key === 'dashboard:start');
+  assert.deepEqual(partial.layout.cards.map(c => c.key), ['question:start_summary', 'question:start_performance']);
+});
+
 test('unavailable optional sources leave out only their cards and empty tabs', async () => {
   const m = fakeMetabase(); const definition = define();
   const installed = await applyPlan(m.api, definition, options, await plan(m.api, definition));
   const dashboard = m.dashboards.get(installed.ids['dashboard:foundation']);
-  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Overview', 'Business review', 'Performance tables']);
+  assert.deepEqual(dashboard.tabs.map(t => t.name), ['Start here', 'Overview', 'Business review', 'Performance tables']);
   assert.ok(!dashboard.dashcards.some(c => c.card_id === installed.ids['question:store_context']));
   assert.ok(definition.unavailable.some(item => item.name === 'All stores' && /dim_stores/.test(item.reason)));
   assert.ok(definition.unavailable.some(item => item.name === 'Reporting context' && /not synced/.test(item.reason)));

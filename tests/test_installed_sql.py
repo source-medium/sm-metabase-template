@@ -241,6 +241,13 @@ class InstalledSql(unittest.TestCase):
         variants = query(self.db, "product_explorer", product_group="'variant'", product_rank="'net_revenue'", product_search="'p2-v'")
         self.assertEqual([(r["product_title"], r["variant_title"]) for r in variants], [("Evening tea", "Large")])
 
+    def test_start_here_returns_exactly_its_presets_in_order(self):
+        literal = {key: card for key, card in cards.items() if "presets" in card}
+        self.assertEqual(len(literal), 8)
+        for key, card in literal.items():
+            with self.subTest(question=key):
+                self.assertEqual(query(self.db, key), card["presets"])
+
     def test_installed_table_settings_and_capture_fields(self):
         for key, card in cards.items():
             with self.subTest(question=key):

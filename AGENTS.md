@@ -22,7 +22,9 @@ No dependencies to install. Node.js 22 or later.
 
 - `foundation/questions.mjs`: every question, dashboard, column title and unit.
 - `foundation/sql/<key>.sql`: each question's SQL. One file per question key;
-  `foundation/sql/include/` holds SQL several questions share.
+  `foundation/sql/include/` holds SQL several questions share. Start here's
+  cards are the exception: their SQL is generated from `presets` in
+  `foundation/questions.mjs`.
 - `src/`: the engine (catalog mapping, ownership, plan, apply). Change it only to
   fix the installer, never to add content.
 - `contracts/dashboard-metrics-v1/definitions.json`: SourceMedium's published
@@ -153,7 +155,8 @@ access can also compile every question with `node scripts/verify-sql.mjs`
   does not filter paid marketing or creatives; Ad platform does. Retention uses
   As-of month and Acquisition sales channel, not Date or Channel. Try another
   Compare with, a Period of Week, and the clicks: a campaign name, a store on All
-  stores, a country then a region, an order.
+  stores, a country then a region, an order, and a Start here question (Weekly
+  review opens the executive summary with Date set to Previous week).
 - Compare a KPI with the catalog definition for the same scope; ratios are
   ratios of sums, and a zero denominator is blank.
 - Generate a second plan with the same options: expect unchanged content,

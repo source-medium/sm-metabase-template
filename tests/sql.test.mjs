@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {compileCatalog, sqlExpression} from '../src/catalog.mjs';
 import {foundationSql} from '../src/foundation.mjs';
-import {questions, dashboards, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
+import {questions, dashboards, presets, presetRows, VALID_SALES_CHANNELS} from '../foundation/questions.mjs';
 import {filtersIn} from '../src/filters.mjs';
 import {foundationTables, documented, options} from './fixtures.mjs';
 
@@ -67,11 +67,25 @@ test('summary SQL counts order measures only on valid sales channels', () => {
 
 test('every question has its SQL file and every SQL file belongs to a question', () => {
   const files = readdirSync(new URL('../foundation/sql/', import.meta.url)).filter(f => f.endsWith('.sql')).map(f => f.slice(0, -4)).sort();
-  assert.deepEqual(files, questions.map(q => q.key).sort());
+  assert.deepEqual(files, questions.filter(q => !q.literal).map(q => q.key).sort());
+});
+
+test('Start here questions are generated literal rows: no table, no filter, one row per preset', () => {
+  const literal = questions.filter(q => q.literal);
+  assert.deepEqual(literal.map(q => q.key), ['start_summary', 'start_performance', 'start_stores', 'start_paid', 'start_creatives',
+    'start_product', 'start_retention', 'start_geography']);
+  for (const question of literal) {
+    assert.doesNotMatch(sql[question.key], /DATASET|METADATA|\{\{/, `${question.key} reads no table and takes no filter`);
+    assert.match(sql[question.key], /FROM UNNEST\(\[\n {2}STRUCT\(/);
+    const ids = [...sql[question.key].matchAll(/STRUCT\(\d+ AS position, '([a-z-]+)' AS preset_id/g)].map(m => m[1]);
+    assert.deepEqual(ids, presetRows(question.key).map(row => row.preset_id));
+  }
+  assert.deepEqual(literal.flatMap(q => presetRows(q.key).map(row => row.preset_id)).sort(), presets.map(p => p.id).sort(),
+    'every preset is on exactly one card');
 });
 
 test('field filters see the source table under its unaliased DATASET or METADATA name', () => {
-  for (const question of questions) {
+  for (const question of questions.filter(q => !q.literal)) {
     const text = sql[question.key];
     const home = question.metadata ? 'METADATA' : 'DATASET';
     assert.ok(text.includes(`\`${home}.${question.table}\``), `${question.key} reads ${home}.${question.table}`);
