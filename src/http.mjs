@@ -60,22 +60,45 @@ async function metadataRows(api, database, query, label) {
   return result.data.rows.map(row => Object.fromEntries(names.map((n, i) => [n, row[i]])));
 }
 
-// Without --store, the Store filter is empty and the dashboards total money across every store,
-// and money is never summed across currencies (AGENTS.md rule 4). A warehouse whose stores
-// report in more than one currency therefore installs only with --store. Like a question, the
-// check needs its source synced: otherwise it is skipped and returned for the plan's unsupported list.
-export async function requireOneCurrency(api, tables, {database, dataset, store}) {
-  if (store) return [];
-  const missing = missingSource({table: 'dim_stores', requires: {dim_stores: ['store_currency_code']}}, tables, dataset);
-  if (missing) return [{name: 'Store currency check', reason: missing}];
-  const rows = await metadataRows(api, database, `SELECT DISTINCT store_currency_code AS currency
-    FROM \`${identifier(dataset)}.dim_stores\` ORDER BY currency`, 'store currency');
-  if (rows.length > 1) {
-    throw new Error(`Stores in ${dataset} report in more than one currency (${rows.map(row => row.currency ?? 'unset').join(', ')}). ` +
+// The store roster decides three things. Without --store the Store filter is empty and the
+// dashboards total money across every store, and money is never summed across currencies
+// (AGENTS.md rule 4), so a warehouse whose stores report in more than one currency installs only
+// with --store. A warehouse with one store gets no store choice and no All stores view. And the
+// reporting store (--store, or the only one) sets the time zone whose calendar the cohorts' latest
+// completed month follows; without one it is UTC. Like a question, the read needs its source
+// synced. When it is not, or when the roster cannot be read with --store given, the dashboards keep
+// their store choice and the check is returned for the plan's unsupported list. Without --store a
+// failed read stops the plan: the currency check must not be skipped.
+export async function readStoreRoster(api, tables, {database, dataset, store}) {
+  const check = store ? 'Store roster check' : 'Store currency check';
+  const missing = missingSource({table: 'dim_stores', requires: {dim_stores: ['sm_store_id', 'store_currency_code']}}, tables, dataset);
+  if (missing) return {stores: null, timeZone: null, unchecked: [{name: check, reason: missing}]};
+  // The time zone is optional: without it the cutoff follows UTC, and the currency check still runs.
+  const zoned = !missingSource({table: 'dim_stores', requires: {dim_stores: ['store_timezone']}}, tables, dataset);
+  const query = `SELECT DISTINCT sm_store_id AS store, store_currency_code AS currency,
+    ${zoned ? 'store_timezone' : 'CAST(NULL AS STRING)'} AS time_zone
+    FROM \`${identifier(dataset)}.dim_stores\` ORDER BY store`;
+  // The reason reaches hosted install summaries, so it never quotes the warehouse's error.
+  const unread = {stores: null, timeZone: null, unchecked: [{name: check, reason: 'The store roster could not be read.'}]};
+  let rows;
+  try { rows = await metadataRows(api, database, query, 'store roster'); }
+  catch (error) { if (!store) throw error; return unread; }
+  if (!rows.every(row => typeof row.store === 'string')) {
+    if (!store) throw new Error('The store roster query returned no store IDs. No content was changed.');
+    return unread;
+  }
+  // Unset first, as BigQuery orders NULL.
+  const currencies = [...new Set(rows.map(row => row.currency ?? null))].sort((a, b) => a === null ? -1 : b === null ? 1 : a < b ? -1 : 1);
+  if (!store && currencies.length > 1) {
+    throw new Error(`Stores in ${dataset} report in more than one currency (${currencies.map(c => c ?? 'unset').join(', ')}). ` +
       'Without --store, the dashboards total money across every store. ' +
       'Pass --store STORE_ID to install for one store. No content was changed.');
   }
-  return [];
+  const stores = new Set(rows.map(row => row.store)).size;
+  const reporting = rows.find(row => row.store === store) ?? (stores === 1 ? rows[0] : null);
+  // Written into SQL as a literal, so only an IANA name (or UTC) is used.
+  const timeZone = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/.test(reporting?.time_zone ?? '') ? reporting.time_zone : null;
+  return {stores, timeZone, unchecked: []};
 }
 
 // value_format is read through the row's JSON so a warehouse whose metadata predates

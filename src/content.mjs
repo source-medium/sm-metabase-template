@@ -104,7 +104,8 @@ export function nativeCard(recipe, sql, options, table, metrics = []) {
   return {name: recipe.name, type: 'question', display: recipe.display || 'table', parameters: [],
     description: recipe.description, visualization_settings: {column_settings, ...(recipe.settings || {})},
     dataset_query: {database: options.database, type: 'native', native: {
-      query: sql.replaceAll('METADATA', options.metadataDataset).replaceAll('DATASET', options.dataset), 'template-tags': tags}}};
+      query: sql.replaceAll('METADATA', options.metadataDataset).replaceAll('DATASET', options.dataset)
+        .replaceAll('REPORTING_TIME_ZONE', options.timeZone ?? 'UTC'), 'template-tags': tags}}};
 }
 
 export const snippetName = (metric, options) => `SM ${scopeFor(options).slice(0, 8)} ${metric}`;

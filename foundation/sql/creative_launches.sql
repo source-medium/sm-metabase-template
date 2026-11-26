@@ -21,7 +21,7 @@ selection_rows AS (
       -- @include ad_platform_name
   CROSS JOIN selected
   WHERE {{date}} AND ad_creative_id IS NOT NULL
-    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
+    [[AND {{ad_platform}}]] [[AND {{store}}]] [[AND {{campaign}}]] [[AND {{campaign_id}}]] [[AND {{ad_set}}]] [[AND {{ad}}]]
     -- @include creative_format_filter
 )
 SELECT

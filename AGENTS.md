@@ -44,7 +44,8 @@ No dependencies to install. Node.js 22 or later.
    unless `--store` is given, which makes Store a required single-value filter
    in dashboards and standalone questions. All stores remains grouped by store.
    Without a synced `dim_stores.store_currency_code`
-   it cannot check, and the plan lists the check under `unsupported`.
+   it cannot check, and the plan lists the check under `unsupported`. A
+   warehouse with one store installs no Store filter and no All stores view.
 5. Keys are identities. Rename `name`, never `key`.
 6. A Metabase filter is navigation, not a permission boundary.
 
@@ -89,8 +90,8 @@ changes are outside this repository: hand them to the user, who does them in
 4. Show the plan, plus a separate proposal for adding cards to the user's own
    dashboards. Prefer referencing managed cards from a customer-owned dashboard.
    Keep existing cards, filters, layout, links, subscriptions and access. Map
-   filters by meaning: sales Channel, Ad platform and cohort As-of month are
-   different scopes, and value filters (Compare with, Period, Shipping country
+   filters by meaning: sales Channel, Ad platform, acquisition sales channel and
+   cohort As-of month are different scopes, and value filters (Compare with, Period, Shipping country
    and the rest in `src/filters.mjs`) map only to questions that read them. For a custom copy, remove the `SM_METABASE_V1` line from
    the copy only.
 5. Apply the approved plan, then only the approved dashboard additions.
@@ -107,8 +108,9 @@ node bin/sourcemedium-metabase.mjs \
 
 Optional: `--store STORE_ID` (required when the stores report in more than one
 currency: without it the dashboards total every store, and the plan refuses),
-`--as-of-month YYYY-MM-01` (a completed month; the
-default is the previous completed UTC month). Keep every option identical when
+`--as-of-month YYYY-MM-01` (a completed month it pins; without it the cohorts
+run through the latest completed month in the reporting store's time zone, UTC
+without one, and move on by themselves). Keep every option identical when
 replacing `--plan` with `--apply foundation-plan.json`. The destination is the
 **parent** of the managed SourceMedium foundation collection; the installer
 refuses the managed collection itself. HTTPS for a remote instance, HTTP only on
@@ -149,8 +151,9 @@ access can also compile every question with `node scripts/verify-sql.mjs`
   required single-value Store with `--store` (optional otherwise), cleared Channel
   and each tab's filter mappings. Sales Channel
   does not filter paid marketing or creatives; Ad platform does. Retention uses
-  As-of month, not Date. Try another Compare with, a Period of Week, and the
-  clicks: a campaign name, a country then a region, an order.
+  As-of month and Acquisition sales channel, not Date or Channel. Try another
+  Compare with, a Period of Week, and the clicks: a campaign name, a store on All
+  stores, a country then a region, an order.
 - Compare a KPI with the catalog definition for the same scope; ratios are
   ratios of sums, and a zero denominator is blank.
 - Generate a second plan with the same options: expect unchanged content,

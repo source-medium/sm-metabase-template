@@ -102,7 +102,7 @@ test('paid questions filter and group by the advertising platform, not the sales
     assert.match(native.query, /GROUP BY source_system/);
   }
   assert.deepEqual(d.nodes.find(n => n.key === 'dashboard:paid').layout.parameters.map(p => p.id),
-    ['date', 'ad_platform', 'store', 'compare', 'compare2', 'grain', 'campaign', 'ad_set', 'ad', 'paid_metric', 'breakdown']);
+    ['date', 'ad_platform', 'store', 'compare', 'compare2', 'grain', 'campaign', 'campaign_id', 'ad_set', 'ad', 'paid_metric', 'breakdown']);
 });
 
 // reporting_queries #2377 (2026-10-24) filtered the summary order measures to valid sales

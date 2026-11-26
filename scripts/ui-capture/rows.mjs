@@ -165,7 +165,6 @@ const comparison = ['Selected period', 'Previous 28 days', 'Same period last yea
     end_date: ['2026-10-28','2026-09-30','2025-10-28'][i], ...Object.fromEntries(['net_revenue','summary_orders','ad_spend','mer'].flatMap(name => [
       ['period_' + name, [measures, previous, lastYear][i][name]], [name + '_change', i ? measures[name] / [measures, previous, lastYear][i][name] - 1 : null]]))}));
 export const rows = {
-  readout: [{readout: 'Net revenue rose to 62,480.50 against the previous period. Ad spend rose, and marketing efficiency increased to 4.20x.'}],
   kpis: [{start_date: dates[0], ...measures, ...prefixed('compare_', previous), ...prefixed('compare2_', lastYear)}], product_totals: [compared({net_revenue: 62480.50, units: 1940})],
   comparison,
   comparison_measures: Object.entries({net_revenue: 'Net revenue', summary_orders: 'Orders', ad_spend: 'Ad spend', mer: 'MER'})

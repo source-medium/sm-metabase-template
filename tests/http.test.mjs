@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
-import {client, metabaseUrl, readWarehouse, identifier, requireOneCurrency} from '../src/http.mjs';
+import {client, metabaseUrl, readWarehouse, identifier, readStoreRoster} from '../src/http.mjs';
 import {argumentsFor, main} from '../bin/sourcemedium-metabase.mjs';
 import {options, foundationTables, rows, paidRows, documented, fakeMetabase} from './fixtures.mjs';
 
@@ -86,50 +86,76 @@ test('an invalid or truncated dictionary cannot silently install an incomplete m
   }
 });
 
-// The warehouse answers the dim_stores currency query with one row per distinct currency.
-const currencyWarehouse = (currencies, queries = []) => async (method, path, body) => {
+// The warehouse answers the dim_stores roster query with a row per store: [store, currency, time zone].
+const rosterWarehouse = (roster, queries = []) => async (method, path, body) => {
   queries.push(body.native.query);
-  return {status: 'completed', data: {cols: [{name: 'currency'}], rows: currencies.map(c => [c]), rows_truncated: false}};
+  return {status: 'completed', data: {cols: [{name: 'store'}, {name: 'currency'}, {name: 'time_zone'}],
+    rows: roster.map(([store, currency, zone = null]) => [store, currency, zone]), rows_truncated: false}};
 };
 const unscoped = {...options, store: undefined};
 const withoutCurrency = foundationTables.map(t => t.name !== 'dim_stores' ? t :
   {...t, fields: t.fields.filter(f => f.name !== 'store_currency_code')});
 
-test('stores in more than one currency are refused unless --store picks one', async () => {
+test('stores in more than one currency are refused unless --store picks one, and the roster is counted either way', async () => {
   const queries = [];
-  assert.deepEqual(await requireOneCurrency(currencyWarehouse(['USD'], queries), foundationTables, unscoped), []);
-  assert.match(queries[0], /SELECT DISTINCT store_currency_code AS currency\s+FROM `tenant_sm_transformed_v2\.dim_stores`/);
-  await assert.rejects(requireOneCurrency(currencyWarehouse(['EUR', 'USD']), foundationTables, unscoped),
+  const two = [['store-a', 'USD', 'America/New_York'], ['store-b', 'USD', 'Europe/London']];
+  assert.deepEqual(await readStoreRoster(rosterWarehouse(two, queries), foundationTables, unscoped), {stores: 2, timeZone: null, unchecked: []});
+  assert.match(queries[0], /SELECT DISTINCT sm_store_id AS store, store_currency_code AS currency,\s+store_timezone AS time_zone\s+FROM `tenant_sm_transformed_v2\.dim_stores`/);
+  await assert.rejects(readStoreRoster(rosterWarehouse([['a', 'EUR'], ['b', 'USD']]), foundationTables, unscoped),
     /tenant_sm_transformed_v2 report in more than one currency \(EUR, USD\)\..*Pass --store STORE_ID/);
-  await assert.rejects(requireOneCurrency(currencyWarehouse([null, 'USD']), foundationTables, unscoped), /\(unset, USD\)/);
-  await assert.rejects(requireOneCurrency(currencyWarehouse(['USD']), foundationTables.map(t => ({...t, schema: 'bad`name'})),
+  await assert.rejects(readStoreRoster(rosterWarehouse([['a', null], ['b', 'USD']]), foundationTables, unscoped), /\(unset, USD\)/);
+  await assert.rejects(readStoreRoster(rosterWarehouse([['a', 'USD']]), foundationTables.map(t => ({...t, schema: 'bad`name'})),
     {...unscoped, dataset: 'bad`name'}), /BigQuery identifiers/);
-  const skipped = [];
-  assert.deepEqual(await requireOneCurrency(currencyWarehouse(['EUR', 'USD'], skipped), foundationTables, options), []);
-  assert.deepEqual(skipped, []);
+  // --store picks the reporting store, whose calendar the cohort cutoff follows.
+  const mixed = [['store-a', 'EUR', 'Europe/Berlin'], ['store-b', 'USD', 'America/Chicago'], ['store-c', 'USD']];
+  assert.deepEqual(await readStoreRoster(rosterWarehouse(mixed), foundationTables, options), {stores: 3, timeZone: 'Europe/Berlin', unchecked: []});
+  // So does the only store.
+  assert.deepEqual(await readStoreRoster(rosterWarehouse([['store-z', 'USD', 'Australia/Sydney']]), foundationTables, unscoped),
+    {stores: 1, timeZone: 'Australia/Sydney', unchecked: []});
+  // A time zone that is not an IANA name never reaches the SQL.
+  assert.equal((await readStoreRoster(rosterWarehouse([['store-a', 'USD', "UTC') OR ('x"]]), foundationTables, options)).timeZone, null);
 });
 
-test('an unsynced store currency skips the check and reports why, like a missing source', async () => {
+test('without a synced time zone the roster still checks currencies, and the cutoff follows UTC', async () => {
+  const queries = [];
+  const tables = foundationTables.map(t => t.name !== 'dim_stores' ? t : {...t, fields: t.fields.filter(f => f.name !== 'store_timezone')});
+  assert.deepEqual(await readStoreRoster(rosterWarehouse([['store-a', 'USD']], queries), tables, options), {stores: 1, timeZone: null, unchecked: []});
+  assert.match(queries[0], /CAST\(NULL AS STRING\) AS time_zone/);
+  await assert.rejects(readStoreRoster(rosterWarehouse([['a', 'EUR'], ['b', 'USD']]), tables, unscoped), /more than one currency/);
+});
+
+test('an unsynced roster skips the check and reports why, like a missing source', async () => {
   for (const [tables, reason] of [[foundationTables.filter(t => t.name !== 'dim_stores'), 'Source table is not synced in the selected dataset.'],
     [withoutCurrency, 'dim_stores has no synced store_currency_code.']]) {
-    const queries = [];
-    assert.deepEqual(await requireOneCurrency(currencyWarehouse(['EUR', 'USD'], queries), tables, unscoped),
-      [{name: 'Store currency check', reason}]);
-    assert.deepEqual(queries, []);
+    for (const [scope, name] of [[unscoped, 'Store currency check'], [options, 'Store roster check']]) {
+      const queries = [];
+      assert.deepEqual(await readStoreRoster(rosterWarehouse([['a', 'EUR'], ['b', 'USD']], queries), tables, scope),
+        {stores: null, timeZone: null, unchecked: [{name, reason}]});
+      assert.deepEqual(queries, []);
+    }
   }
 });
 
-test('a failed store currency query names the warehouse error', async () => {
+test('a failed roster query stops a plan without --store, and is reported with it', async () => {
   const failed = async () => ({status: 'failed', error: 'Access Denied: Table p:tenant_sm_transformed_v2.dim_stores'});
-  await assert.rejects(requireOneCurrency(failed, foundationTables, unscoped),
-    /^Error: The store currency query failed: Access Denied: Table p:tenant_sm_transformed_v2\.dim_stores\. No content was changed\.$/);
-  await assert.rejects(requireOneCurrency(async () => ({status: 'failed'}), foundationTables, unscoped),
-    /^Error: The store currency query failed\. No content was changed\.$/);
+  await assert.rejects(readStoreRoster(failed, foundationTables, unscoped),
+    /^Error: The store roster query failed: Access Denied: Table p:tenant_sm_transformed_v2\.dim_stores\. No content was changed\.$/);
+  await assert.rejects(readStoreRoster(async () => ({status: 'failed'}), foundationTables, unscoped),
+    /^Error: The store roster query failed\. No content was changed\.$/);
+  // With --store the currency check is not needed, so the plan goes on and keeps the store choice.
+  // The reason reaches hosted install summaries, so it never quotes the warehouse's error.
+  const unread = {stores: null, timeZone: null, unchecked: [{name: 'Store roster check', reason: 'The store roster could not be read.'}]};
+  assert.deepEqual(await readStoreRoster(failed, foundationTables, options), unread);
+  // An answer without store IDs, as from a proxy that answers every query alike, counts nothing.
+  const other = async () => ({status: 'completed', data: {cols: [{name: 'table_name'}], rows: [['dim_stores'], ['obt_orders']], rows_truncated: false}});
+  assert.deepEqual(await readStoreRoster(other, foundationTables, options), unread);
+  await assert.rejects(readStoreRoster(other, foundationTables, unscoped), /no store IDs\. No content was changed\.$/);
 });
 
 // main() against a fake Metabase: its content API, the database's synced tables, and native
-// queries answered as BigQuery would, the currency read failing when its column does not exist.
-async function planWith(synced, currencies, extra = []) {
+// queries answered as BigQuery would, the roster read failing when its columns do not exist.
+// `roster` is [store, currency] per store.
+async function planWith(synced, roster, extra = []) {
   const folder = await mkdtemp(join(tmpdir(), 'sm-metabase-currency-test-'));
   const token = join(folder, 'token'); const planFile = join(folder, 'plan.json');
   const metabase = fakeMetabase(); const queries = [];
@@ -144,7 +170,7 @@ async function planWith(synced, currencies, extra = []) {
     if (query.includes('dim_semantic_metric_catalog')) return answer([...rows, ...paidRows]);
     if (query.includes('dim_data_dictionary')) return answer(documented(synced).map(t => ({...t, columns: JSON.stringify(t.columns)})));
     return synced.some(t => t.name === 'dim_stores' && t.fields.some(f => f.name === 'store_currency_code')) ?
-      answer(currencies.map(currency => ({currency}))) : {status: 'failed', error: 'Unrecognized name: store_currency_code'};
+      answer(roster.map(([store, currency]) => ({store, currency, time_zone: null}))) : {status: 'failed', error: 'Unrecognized name: store_currency_code'};
   };
   const original = {fetch: globalThis.fetch, log: console.log};
   try {
@@ -154,7 +180,7 @@ async function planWith(synced, currencies, extra = []) {
     console.log = () => {};
     await main(['--url', options.url, '--database-id', '1', '--collection-id', '3', '--dataset', options.dataset,
       '--metadata-dataset', options.metadataDataset, '--api-key-file', token, '--plan', planFile, ...extra]);
-    return {plan: JSON.parse(await readFile(planFile, 'utf8')), currencyQueries: queries.filter(q => q.includes('dim_stores'))};
+    return {plan: JSON.parse(await readFile(planFile, 'utf8')), rosterQueries: queries.filter(q => q.includes('dim_stores'))};
   } catch (error) {
     await assert.rejects(readFile(planFile), {code: 'ENOENT'});
     throw error;
@@ -163,20 +189,36 @@ async function planWith(synced, currencies, extra = []) {
 const currencyNote = plan => plan.unsupported.filter(item => item.name === 'Store currency check');
 
 test('without --store, a multi-currency warehouse writes no plan; one currency, or --store, plans', async () => {
-  await assert.rejects(planWith(foundationTables, ['CAD', 'USD']), /more than one currency \(CAD, USD\)/);
-  const single = await planWith(foundationTables, ['USD']);
-  assert.equal(single.currencyQueries.length, 1);
+  await assert.rejects(planWith(foundationTables, [['store-a', 'CAD'], ['store-b', 'USD']]), /more than one currency \(CAD, USD\)/);
+  const single = await planWith(foundationTables, [['store-a', 'USD'], ['store-b', 'USD']]);
+  assert.equal(single.rosterQueries.length, 1);
   assert.deepEqual(currencyNote(single.plan), []);
-  const scoped = await planWith(foundationTables, ['CAD', 'USD'], ['--store', 'store-a']);
-  assert.deepEqual(scoped.currencyQueries, []);
-  assert.deepEqual(currencyNote(scoped.plan), []);
+  const scoped = await planWith(foundationTables, [['store-a', 'CAD'], ['store-b', 'USD']], ['--store', 'store-a']);
+  assert.equal(scoped.rosterQueries.length, 1);
+  assert.deepEqual(scoped.plan.unsupported.filter(item => /^Store (currency|roster) check$/.test(item.name)), []);
+});
+
+test('a warehouse with one store installs no store choice and no All stores view', async () => {
+  const keys = plan => plan.actions.map(a => a.key);
+  const parameters = plan => plan.actions.filter(a => a.kind === 'dashboard')
+    .flatMap(a => a.changes.find(c => c.field === 'layout')?.after.parameters ?? []).map(p => p.id);
+  for (const extra of [[], ['--store', 'store-a']]) {
+    const several = (await planWith(foundationTables, [['store-a', 'USD'], ['store-b', 'USD']], extra)).plan;
+    assert.ok(keys(several).includes('dashboard:stores') && keys(several).includes('question:stores'));
+    assert.ok(parameters(several).includes('store'));
+    const one = (await planWith(foundationTables, [['store-a', 'USD']], extra)).plan;
+    assert.ok(!keys(one).includes('dashboard:stores') && !keys(one).includes('question:stores'));
+    assert.ok(!parameters(one).includes('store'));
+    // Not a limitation: there is nothing to compare, so nothing is reported missing.
+    assert.ok(!one.unsupported.some(item => /stores/i.test(item.name)));
+  }
 });
 
 test('a warehouse without synced store currencies still plans, and the plan lists the skipped check', async () => {
   for (const [synced, reason] of [[foundationTables.filter(t => t.name !== 'dim_stores'), 'Source table is not synced in the selected dataset.'],
     [withoutCurrency, 'dim_stores has no synced store_currency_code.']]) {
-    const {plan, currencyQueries} = await planWith(synced, ['CAD', 'USD']);
-    assert.deepEqual(currencyQueries, []);
+    const {plan, rosterQueries} = await planWith(synced, [['store-a', 'CAD'], ['store-b', 'USD']]);
+    assert.deepEqual(rosterQueries, []);
     assert.deepEqual(currencyNote(plan), [{name: 'Store currency check', reason, kind: 'content'}]);
     assert.ok(plan.actions.some(a => a.key === 'question:kpis' && a.action === 'create'));
   }
@@ -187,7 +229,9 @@ test('CLI requires explicit targets, completed months and separate review/apply 
     '--dataset', 'tenant_sm_transformed_v2', '--metadata-dataset', 'tenant_sm_metadata',
     '--api-key-file', '/tmp/customer-token', '--plan', '/tmp/review.json'];
   const options = argumentsFor(args, new Date('2026-10-12T12:00:00Z'));
-  assert.equal(options.asOf, '2026-09-01');
+  // No month: the cohorts roll; --as-of-month pins a completed one.
+  assert.equal(options.asOf, null);
+  assert.equal(argumentsFor([...args, '--as-of-month', '2026-09-01'], new Date('2026-10-12T12:00:00Z')).asOf, '2026-09-01');
   assert.equal(options.apply, false);
   assert.throws(() => argumentsFor([...args, '--apply', '/tmp/review.json']));
   assert.throws(() => argumentsFor([...args, '--session-file', '/tmp/session.json']));

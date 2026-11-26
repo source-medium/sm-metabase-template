@@ -3,7 +3,7 @@ import {readFile, writeFile, realpath, rename} from 'node:fs/promises';
 import {parseArgs} from 'node:util';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
-import {client, identifier, metabaseUrl, readWarehouse, requireOneCurrency} from '../src/http.mjs';
+import {client, identifier, metabaseUrl, readStoreRoster, readWarehouse} from '../src/http.mjs';
 import {compileCatalog} from '../src/catalog.mjs';
 import {definitions, foundationSql} from '../src/foundation.mjs';
 import {formattingFor} from '../src/formats.mjs';
@@ -26,10 +26,12 @@ export function argumentsFor(argv, now = new Date()) {
       Boolean(values.plan) === Boolean(values.apply) || Boolean(values['api-key-file']) === Boolean(values['session-file'])) {
     throw new Error('Supply URL, database ID, dataset, metadata dataset, collection ID, one token file and exactly one of --plan or --apply.');
   }
+  // Without --as-of-month, cohorts run through the latest completed month and move on by themselves.
   const month = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 10);
-  const asOf = values['as-of-month'] || previous;
-  if (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(asOf) || new Date(asOf) >= month) throw new Error('As-of month must be the first day of a completed month.');
+  const asOf = values['as-of-month'] ?? null;
+  if (asOf !== null && (!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(asOf) || new Date(asOf) >= month)) {
+    throw new Error('As-of month must be the first day of a completed month.');
+  }
   return {url: metabaseUrl(values.url), database, collection, dataset: identifier(values.dataset),
     metadataDataset: identifier(values['metadata-dataset']), store: values.store, asOf,
     planFile: values.plan || values.apply, apply: !!values.apply, ownershipFile: values['ownership-map'],
@@ -62,20 +64,22 @@ async function tokenFor(options) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const options = argumentsFor(argv);
-  const planPath = await resolved(options.planFile, 'plan file');
-  const tokenPath = await realpath(options.tokenFile);
+  const parsed = argumentsFor(argv);
+  const planPath = await resolved(parsed.planFile, 'plan file');
+  const tokenPath = await realpath(parsed.tokenFile);
   if (planPath === tokenPath) throw new Error('Use separate files for the Metabase credential and the review plan.');
-  if (options.ownershipFile) {
-    if ([planPath, tokenPath].includes(await resolved(options.ownershipFile, 'ownership map'))) {
+  if (parsed.ownershipFile) {
+    if ([planPath, tokenPath].includes(await resolved(parsed.ownershipFile, 'ownership map'))) {
       throw new Error('Use a separate file for the ownership map.');
     }
-    options.ownership = await readOwnership(options.ownershipFile);
+    parsed.ownership = await readOwnership(parsed.ownershipFile);
   }
-  const api = client(options.url, await tokenFor(options), {session: options.session});
+  const api = client(parsed.url, await tokenFor(parsed), {session: parsed.session});
   const sql = foundationSql();
-  const warehouse = await readWarehouse(api, options.database, options.metadataDataset);
-  const unchecked = await requireOneCurrency(api, warehouse.tables, options);
+  const warehouse = await readWarehouse(api, parsed.database, parsed.metadataDataset);
+  // Apply reads the roster again: a different count changes the content, so the reviewed plan is stale.
+  const {stores, timeZone, unchecked} = await readStoreRoster(api, warehouse.tables, parsed);
+  const options = {...parsed, singleStore: stores === 1, timeZone};
   const catalog = compileCatalog(warehouse.rows, warehouse.tables, options.dataset, warehouse.dictionary);
   const formatting = formattingFor(catalog);
   const built = definitions(catalog, warehouse.tables, sql, options);

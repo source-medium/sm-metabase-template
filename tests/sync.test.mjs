@@ -85,12 +85,21 @@ test('clicks set filters on the same dashboard, or open another dashboard with i
   const click = (dashboard, question, column) => m.dashboards.get(installed.ids[dashboard]).dashcards
     .find(c => c.card_id === installed.ids[`question:${question}`]).visualization_settings.column_settings[JSON.stringify(['name', column])].click_behavior;
   const set = (id, column) => ({id, source: {type: 'column', id: column, name: column}, target: {type: 'parameter', id}});
+  const carry = (id, name) => ({id, source: {type: 'parameter', id, name}, target: {type: 'parameter', id}});
   assert.deepEqual(click('dashboard:geography', 'geography_regions', 'region'),
     {type: 'crossfilter', parameterMapping: {country: set('country', 'country'), region: set('region', 'region')}});
   assert.deepEqual(click('dashboard:orders', 'orders', 'order_name'), {type: 'crossfilter', parameterMapping: {order: set('order', 'order_key')}});
+  // A store opens its executive summary for the dates, channel and comparisons in view.
   for (const dashboard of ['dashboard:stores', 'dashboard:foundation']) {
     assert.deepEqual(click(dashboard, 'stores', 'store_name'),
-      {type: 'link', linkType: 'dashboard', targetId: installed.ids['dashboard:summary'], parameterMapping: {store: set('store', 'store_id')}});
+      {type: 'link', linkType: 'dashboard', targetId: installed.ids['dashboard:summary'], parameterMapping: {store: set('store', 'store_id'),
+        date: carry('date', 'Date'), channel: carry('channel', 'Channel'), compare: carry('compare', 'Compare with'),
+        compare2: carry('compare2', 'Second comparison')}});
+  }
+  // A campaign selects that campaign exactly, on its own platform; a name search would also match its namesakes.
+  for (const dashboard of ['dashboard:paid', 'dashboard:foundation']) {
+    assert.deepEqual(click(dashboard, 'paid_campaign', 'campaign_name'), {type: 'crossfilter',
+      parameterMapping: {campaign_id: set('campaign_id', 'ad_campaign_id'), ad_platform: set('ad_platform', 'source_system')}});
   }
   for (const dashboard of ['dashboard:creatives', 'dashboard:foundation']) {
     assert.deepEqual(click(dashboard, 'creatives', 'creative_title'),

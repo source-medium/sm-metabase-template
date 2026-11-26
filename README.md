@@ -49,14 +49,14 @@ delivers its tables, so a missing source never hides the others.
 
 | Tab | Questions | Source |
 | --- | --- | --- |
-| Overview | A one-sentence readout of what moved; net revenue, orders, MER, revenue per order and sessions against two comparison periods, and ad spend as a value without one; the period comparison; six daily or cumulative trends with the comparison dashed; the biggest daily changes; sales channel contributions | `rpt_executive_summary_daily` |
+| Overview | Net revenue, orders, ad spend and MER, then the daily or cumulative revenue trend with the comparison dashed; the biggest daily changes; sales channel contributions; revenue per order and sessions; the period comparison; five more trends | `rpt_executive_summary_daily` |
 | Business review | Revenue and deductions and new vs repeat purchases against the comparison, a business summary by day, week or month, and each store's currency, time zone and latest data date | `rpt_executive_summary_daily`, `dim_stores` |
 | Performance tables | Revenue and orders, marketing efficiency, and new and repeat purchases by day, week or month, plus ad platform delivery and results by period (CPM, CPC, conversion rate) | `rpt_executive_summary_daily`, `rpt_ad_performance_daily` |
-| All stores | One row per store with revenue change and latest data date, never a cross-store total; a store name opens its executive summary | `rpt_executive_summary_daily`, `dim_stores` |
-| Paid marketing | Ad platform economics, a measure over time by platform, spend broken down by platform, campaign, campaign type or tactic against the comparison, and campaigns; a campaign name filters the tab and Creatives | `rpt_ad_performance_daily` |
+| All stores | With two or more stores: one row per store with revenue change and latest data date, never a cross-store total; a store name opens its executive summary for the same dates, channel and comparisons | `rpt_executive_summary_daily`, `dim_stores` |
+| Paid marketing | Ad platform economics, a measure over time by platform, spend broken down by platform, campaign, campaign type or tactic against the comparison, and campaigns; a campaign name filters the tab and Creatives to exactly that campaign | `rpt_ad_performance_daily` |
 | Creatives | Creative spend, platform ROAS, creatives running and new ones against the comparison; spend and ROAS by each creative's latest format (select one to filter the tab) and by launch week; the top creatives by a chosen sort with images, format, first spend, and spend and ROAS changes. Select a creative to inspect its current assets (up to 500), including copy, images and video links where supplied | `rpt_ad_performance_daily`, `rpt_ad_creative_assets` |
 | Products | Net revenue and units against both comparisons; products or variants ranked by revenue, units, profit or refunds, or the biggest gainers and decliners, with refund rate and cost coverage | `obt_order_lines` |
-| Retention | Rate (monthly retention or second purchase) and value (gross profit LTV or revenue LTR) curves, all twelve cohorts as heat-shaded matrices, optionally for one acquisition segment | `rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters` |
+| Retention | Rate (monthly retention or second purchase) and value (gross profit LTV or revenue LTR) curves, all twelve cohorts as heat-shaded matrices, optionally for one acquisition segment. Cohorts are one acquisition sales channel (the first valid one the store has, Online DTC first, until you choose), labeled like "May 2026 · Online DTC" | `rpt_cohort_ltv_by_first_valid_purchase_attribute_no_product_filters` |
 | Geography | Revenue, orders and mapped coverage against both comparisons, world and US state maps, countries and regions with revenue change, and a daily trend; a country, then a region, scopes the tab and Orders | `obt_orders` |
 | Orders | The 500 most recently processed orders, all or only valid, searchable by name, number or ID; an order opens its details and attribution evidence | `obt_orders`, `fct_order_attribution_signals` |
 | Data | Source freshness, the published metric catalog and the field dictionary | `sm_metadata` |
@@ -172,13 +172,15 @@ cd sm-metabase-template
    total every store, so the plan refuses a warehouse whose stores report in
    more than one currency until you pass one. When `dim_stores.store_currency_code`
    is not synced, the plan cannot check and lists the check under `unsupported`
-   instead. Retention's cutoff defaults to
-   the previous completed UTC month; `--as-of-month YYYY-MM-01` picks another.
+   instead. A warehouse with one store gets no Store filter and no All stores
+   view. Retention's cutoff is the latest completed month in the reporting
+   store's time zone (UTC when there is no single reporting store) and moves on
+   each month; `--as-of-month YYYY-MM-01` pins one.
 4. Review `foundation-plan.json`: `changes` (what it creates or updates),
    `unsupported` (each with a reason and a `kind`: `content` it left out, or a
    catalog `metric` it cannot express exactly), `retained`, `formatting` and any conflicts. Planning reads
-   metadata and runs small BigQuery queries on the metric catalog and, without
-   `--store`, on your stores' currencies; it changes nothing.
+   metadata and runs small BigQuery queries on the metric catalog and on your
+   store list (currencies, how many stores, time zones); it changes nothing.
 5. Apply the reviewed plan with the same options:
 
    ```bash
