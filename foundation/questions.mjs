@@ -564,4 +564,4 @@ export function dashboards() {
 
 /** The combined dashboard: every available dashboard above, one tab each. */
 export const combinedDashboard = {key: 'dashboard:foundation', name: 'SourceMedium foundation dashboard',
-  description: 'Common questions to start from, then revenue, performance tables, stores, marketing, creatives, products, retention, geography, orders and data in one dashboard. Sales Channel, Ad platform and cohort As-of month apply only to their mapped tabs. Use one reporting currency and the published source calendars.'};
+  description: 'Revenue, performance tables, stores, marketing, creatives, products, retention, geography, orders and data in one dashboard. Sales Channel, Ad platform and cohort As-of month apply only to their mapped tabs. Use one reporting currency and the published source calendars.'};
